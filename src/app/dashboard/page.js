@@ -4,6 +4,7 @@ import {
   saveReturnRequests,
   updateReturnRequestInStorage,
 } from "@/lib/returnRequests";
+import AnalyticsCard from "@/components/AnalyticsCard";
 
 // ── Risk-level colour maps ────────────────────────────────────────
 const riskConfig = {
@@ -174,46 +175,37 @@ function ReturnCard({ request, onUpdated }) {
 
         {/* ── Metrics row (AI score — merchant only) ── */}
         <div className="grid grid-cols-3 gap-3 mb-5">
+          <AnalyticsCard
+            label="AI Score"
+            value={`${request.recoveryScore}%`}
+            subtitle={risk.confidence}
+            subtitleClassName="text-xs text-slate-400 mt-1.5"
+            barPercent={request.recoveryScore}
+            barColorClass={risk.scoreBar}
+          />
 
-          <div className="bg-slate-50 rounded-xl p-3.5">
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">
-              AI Score
-            </p>
-            <p className="text-2xl font-bold text-slate-900 leading-none">
-              {request.recoveryScore}%
-            </p>
-            <div className="mt-2 h-1 w-full bg-slate-200 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full ${risk.scoreBar} transition-all duration-500`}
-                style={{ width: `${request.recoveryScore}%` }}
-              />
-            </div>
-            <p className="text-xs text-slate-400 mt-1.5">{risk.confidence}</p>
-          </div>
+          <AnalyticsCard
+            label="Risk Level"
+            value={request.riskLevel}
+            valueClassName={`text-2xl font-bold leading-none ${risk.riskText}`}
+            subtitle={
+              request.riskLevel === "Low"
+                ? "Minimal churn risk"
+                : request.riskLevel === "Medium"
+                  ? "Watch closely"
+                  : request.riskLevel === "High"
+                    ? "Escalate quickly"
+                    : ""
+            }
+          />
 
-          <div className="bg-slate-50 rounded-xl p-3.5">
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">
-              Risk Level
-            </p>
-            <p className={`text-2xl font-bold leading-none ${risk.riskText}`}>
-              {request.riskLevel}
-            </p>
-            <p className="text-xs text-slate-400 mt-3">
-              {request.riskLevel === "Low"    && "Minimal churn risk"}
-              {request.riskLevel === "Medium" && "Watch closely"}
-              {request.riskLevel === "High"   && "Escalate quickly"}
-            </p>
-          </div>
-
-          <div className="bg-slate-50 rounded-xl p-3.5">
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">
-              Best Action
-            </p>
-            <p className="text-base font-bold text-slate-900 leading-snug">
-              {request.bestAction}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">AI recommended</p>
-          </div>
+          <AnalyticsCard
+            label="Best Action"
+            value={request.bestAction}
+            valueClassName="text-base font-bold text-slate-900 leading-snug"
+            subtitle="AI recommended"
+            subtitleClassName="text-xs text-slate-400 mt-1"
+          />
 
         </div>
 
