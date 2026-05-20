@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { addReturnRequest, buildReturnRequest } from "@/lib/returnRequests";
 
 // ── Step indicator ───────────────────────────────────────────────
 function StepBadge({ step, label }) {
@@ -70,18 +71,27 @@ export default function Home() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/submit-return", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderNumber, email, reason, comment, selectedOption, proofImage }),
+      const newRequest = buildReturnRequest({
+        orderNumber,
+        email,
+        reason,
+        comment,
+        selectedOption,
+        proofImage,
       });
-      const data = await res.json();
+      addReturnRequest(newRequest);
 
-      if (data.success) {
-        setStep("confirm");
-      } else {
-        setError("Failed to submit. Please try again.");
+      try {
+        await fetch("/api/submit-return", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderNumber, email, reason, comment, selectedOption, proofImage }),
+        });
+      } catch {
+        // Server memory may be empty in dev; localStorage is the source of truth
       }
+
+      setStep("confirm");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

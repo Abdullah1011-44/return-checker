@@ -1,4 +1,4 @@
-import { returnRequests } from "../../lib/returnRequests";
+import { returnRequests } from "@/lib/returnRequests";
 
 export async function PATCH(request) {
   try {
