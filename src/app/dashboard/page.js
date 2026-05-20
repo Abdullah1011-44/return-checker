@@ -5,6 +5,7 @@ import {
   updateReturnRequestInStorage,
 } from "@/lib/returnRequests";
 import AnalyticsCard from "@/components/AnalyticsCard";
+import StatusBadge from "@/components/StatusBadge";
 
 // ── Risk-level colour maps ────────────────────────────────────────
 const riskConfig = {
@@ -32,15 +33,6 @@ const riskConfig = {
     riskText:   "text-red-700",
     confidence: "Low confidence",
   },
-};
-
-// ── Status badge styles (expanded for new statuses) ───────────────
-const statusConfig = {
-  "Pending Review":  "bg-amber-50 text-amber-800 border border-amber-200",
-  "Needs Attention": "bg-red-50 text-red-800 border border-red-200",
-  "Approved":        "bg-emerald-50 text-emerald-800 border border-emerald-200",
-  "Manual Review":   "bg-blue-50 text-blue-800 border border-blue-200",
-  "Resolved":        "bg-slate-100 text-slate-600 border border-slate-200",
 };
 
 const reasonLabels = {
@@ -140,9 +132,7 @@ function ReturnCard({ request, onUpdated }) {
           </div>
 
           {/* Status pill — updates live because request comes from parent state */}
-          <span className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${statusConfig[request.status] ?? "bg-slate-100 text-slate-600"}`}>
-            {request.status}
-          </span>
+          <StatusBadge status={request.status} />
         </div>
 
         {/* ── Customer comment ── */}
