@@ -6,7 +6,7 @@ import {
 } from "@/lib/returnRequests";
 import AnalyticsCard from "@/components/AnalyticsCard";
 import StatusBadge from "@/components/StatusBadge";
-
+import ProgressBar from "@/components/ProgressBar.jsx";
 // ── Risk-level colour maps ────────────────────────────────────────
 const riskConfig = {
   Low: {
@@ -165,14 +165,21 @@ function ReturnCard({ request, onUpdated }) {
 
         {/* ── Metrics row (AI score — merchant only) ── */}
         <div className="grid grid-cols-3 gap-3 mb-5">
-          <AnalyticsCard
-            label="AI Score"
-            value={`${request.recoveryScore}%`}
-            subtitle={risk.confidence}
-            subtitleClassName="text-xs text-slate-400 mt-1.5"
-            barPercent={request.recoveryScore}
-            barColorClass={risk.scoreBar}
-          />
+          <div className="bg-slate-50 rounded-xl p-3.5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">
+              AI Score
+            </p>
+            <p className="text-2xl font-bold text-slate-900 leading-none">
+              {request.recoveryScore}%
+            </p>
+            <div className="mt-2">
+              <ProgressBar
+                percent={request.recoveryScore}
+                barColorClass={risk.scoreBar}
+              />
+            </div>
+            <p className="text-xs text-slate-400 mt-1.5">{risk.confidence}</p>
+          </div>
 
           <AnalyticsCard
             label="Risk Level"
