@@ -1,6 +1,5 @@
 export const STORAGE_KEY = "returnRequests";
 
-// Empty array kept for API routes that still import this module on the server
 export const returnRequests = [];
 
 const scoreMap = {
@@ -19,35 +18,102 @@ const riskMap = {
   other: "Medium",
 };
 
-const actionMap = {
+const itemActionMap = {
   wrong_size: "Exchange Product",
-  damaged_item: "Manual Review",
   changed_mind: "Store Credit",
-  late_delivery: "Partial Refund",
+  damaged_item: "Manual Review",
+  defective_item: "Manual Review",
+  late_delivery: "Store Credit",
   other: "Manual Review",
 };
 
-export function buildReturnRequest({
-  orderNumber,
-  email,
-  reason,
-  comment,
-  selectedOption,
-  proofImage,
-}) {
+export function getItemRecommendedAction(returnReason) {
+  return itemActionMap[returnReason] ?? "Manual Review";
+}
+
+function getRequestBestAction(items) {
+  const recommendations = items.map((item) =>
+    getItemRecommendedAction(item.returnReason)
+  );
+  const unique = [...new Set(recommendations.filter(Boolean))];
+
+  if (unique.length === 0) return "Manual Review";
+  if (unique.length === 1) return unique[0];
+  return "Mixed Recommendations";
+}
+
+function getPrimaryReason(items) {
+  if (!items.length) return "other";
+  const scores = items.map((item) => scoreMap[item.returnReason] ?? 60);
+  const lowestScore = Math.min(...scores);
+  const primary = items.find(
+    (item) => (scoreMap[item.returnReason] ?? 60) === lowestScore
+  );
+  return primary?.returnReason || items[0].returnReason || "other";
+}
+
+function normalizeReturnRequestItem(item) {
+  const returnReason = item.returnReason || "";
+  return {
+    itemId: item.itemId || item.id,
+    id: item.itemId || item.id,
+    title: item.title,
+    sku: item.sku,
+    quantity: item.quantity,
+    price: item.price,
+    returnReason,
+    comment: item.comment || "",
+    selectedOption: item.selectedOption || "",
+    proofImageName: item.proofImageName || "",
+    proofImage: item.proofImage || "",
+    recommendedAction: item.recommendedAction || getItemRecommendedAction(returnReason),
+  };
+}
+
+function mapToSelectedItems(returnRequestItems) {
+  return returnRequestItems.map((item) => {
+    const normalized = normalizeReturnRequestItem(item);
+    return {
+      id: normalized.itemId,
+      title: normalized.title,
+      sku: normalized.sku,
+      quantity: normalized.quantity,
+      price: normalized.price,
+      returnReason: normalized.returnReason,
+      comment: normalized.comment,
+      selectedOption: normalized.selectedOption,
+      proofImageName: normalized.proofImageName,
+      proofImage: normalized.proofImage,
+      recommendedAction: normalized.recommendedAction,
+    };
+  });
+}
+
+export function buildReturnRequest({ orderNumber, email, returnRequestItems = [] }) {
+  const normalizedItems = returnRequestItems.map(normalizeReturnRequestItem);
+  const selectedItems = mapToSelectedItems(normalizedItems);
+  const primaryReason = getPrimaryReason(normalizedItems);
+  const combinedComment = normalizedItems
+    .map((item) => item.comment)
+    .filter(Boolean)
+    .join(" | ");
+
   return {
     id: Date.now(),
     orderNumber: orderNumber.replace("#", "").trim(),
     email,
-    reason,
-    customerComment: comment || "",
-    selectedOption,
-    recoveryScore: scoreMap[reason] ?? 60,
-    riskLevel: riskMap[reason] ?? "Medium",
-    bestAction: actionMap[reason] ?? "Manual Review",
+    returnRequestItems: normalizedItems,
+    selectedItems,
+    reason: primaryReason,
+    comment: combinedComment,
+    selectedOption: selectedItems[0]?.selectedOption || "",
+    customerComment: combinedComment,
+    proofImage: selectedItems.find((item) => item.proofImage)?.proofImage || "",
+    recoveryScore: scoreMap[primaryReason] ?? 60,
+    riskLevel: riskMap[primaryReason] ?? "Medium",
+    bestAction: getRequestBestAction(normalizedItems),
     status: "Pending Review",
     createdAt: new Date().toISOString(),
-    proofImage: proofImage || "",
   };
 }
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import AnalyticsCard from "@/components/AnalyticsCard";
 import StatusBadge from "@/components/StatusBadge";
 import ProgressBar from "@/components/ProgressBar.jsx";
+import { getItemRecommendedAction } from "@/lib/returnRequests";
 
 const reasonLabels = {
   wrong_size: "Wrong size",
@@ -12,6 +13,54 @@ const reasonLabels = {
   late_delivery: "Late delivery",
   other: "Other",
 };
+
+function normalizeDashboardItem(item) {
+  const returnReason = item.returnReason || "";
+  return {
+    id: item.id || item.itemId,
+    title: item.title,
+    sku: item.sku,
+    quantity: item.quantity,
+    price: item.price,
+    returnReason,
+    comment: item.comment || "",
+    selectedOption: item.selectedOption || "",
+    proofImageName: item.proofImageName || "",
+    proofImage: item.proofImage || "",
+    recommendedAction:
+      item.recommendedAction || getItemRecommendedAction(returnReason),
+  };
+}
+
+function getDisplayBestAction(request, items) {
+  if (items.length === 0) {
+    return request.bestAction || "Manual Review";
+  }
+
+  const recommendations = items.map((item) => item.recommendedAction);
+  const unique = [...new Set(recommendations.filter(Boolean))];
+
+  if (unique.length === 1) return unique[0];
+  if (unique.length > 1) return "Mixed Recommendations";
+  return request.bestAction || "Manual Review";
+}
+
+function getSelectedItems(request) {
+  const merged = new Map();
+
+  for (const item of request.selectedItems || []) {
+    const normalized = normalizeDashboardItem(item);
+    merged.set(normalized.id, normalized);
+  }
+
+  for (const item of request.returnRequestItems || []) {
+    const normalized = normalizeDashboardItem(item);
+    const existing = merged.get(normalized.id) || {};
+    merged.set(normalized.id, { ...existing, ...normalized });
+  }
+
+  return Array.from(merged.values());
+}
 
 export default function RequestCard({
   request,
@@ -55,6 +104,9 @@ export default function RequestCard({
     runAction(() => onNoteChange(note));
   }
 
+  const selectedItems = getSelectedItems(request);
+  const displayBestAction = getDisplayBestAction(request, selectedItems);
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
 
@@ -80,12 +132,23 @@ export default function RequestCard({
               </p>
               <p className="text-sm font-semibold text-slate-800">{request.email}</p>
               <div className="flex flex-wrap gap-2 mt-2">
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-3 py-1">
-                  {reasonLabels[request.reason] ?? request.reason}
-                </span>
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-3 py-1">
-                  {request.selectedOption}
-                </span>
+                {selectedItems.length > 0 ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-3 py-1">
+                    {selectedItems.length} selected item
+                    {selectedItems.length === 1 ? "" : "s"}
+                  </span>
+                ) : (
+                  <>
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-3 py-1">
+                      {reasonLabels[request.reason] ?? request.reason}
+                    </span>
+                    {request.selectedOption && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-3 py-1">
+                        {request.selectedOption}
+                      </span>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -93,7 +156,73 @@ export default function RequestCard({
           <StatusBadge status={request.status} />
         </div>
 
-        {request.customerComment && (
+        <div className="mb-5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
+            Selected Return Items
+          </p>
+
+          {selectedItems.length === 0 ? (
+            <p className="text-sm text-slate-500 bg-slate-50 rounded-xl border border-slate-100 px-4 py-3">
+              No selected items recorded
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {selectedItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-slate-50 rounded-xl border border-slate-100 px-4 py-3 space-y-2"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{item.title}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      SKU: {item.sku} · Qty: {item.quantity} · $
+                      {Number(item.price).toFixed(2)}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-1.5 text-xs text-slate-600 border-t border-slate-200 pt-2">
+                    <p>
+                      <span className="font-semibold text-slate-700">Return reason:</span>{" "}
+                      {item.returnReason
+                        ? reasonLabels[item.returnReason] ?? item.returnReason
+                        : "Not provided"}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-slate-700">Customer note:</span>{" "}
+                      {item.comment || "No comment provided"}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-slate-700">Preferred resolution:</span>{" "}
+                      {item.selectedOption || "Not provided"}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-slate-700">AI recommended action:</span>{" "}
+                      <span className="inline-flex items-center rounded-full bg-slate-800 text-white px-2 py-0.5 text-[11px] font-semibold">
+                        {item.recommendedAction}
+                      </span>
+                    </p>
+                    <p>
+                      <span className="font-semibold text-slate-700">Proof image:</span>{" "}
+                      {item.proofImageName || "No proof uploaded"}
+                    </p>
+                  </div>
+
+                  {item.proofImage && (
+                    <a href={item.proofImage} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={item.proofImage}
+                        alt={`Proof for ${item.title}`}
+                        className="w-full max-h-40 object-contain rounded-lg border border-slate-200 bg-white hover:opacity-90 transition-opacity"
+                      />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!selectedItems.length && request.customerComment && (
           <div className="mb-5 bg-slate-50 rounded-xl border border-slate-100 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-1">
               Customer note
@@ -104,7 +233,7 @@ export default function RequestCard({
           </div>
         )}
 
-        {request.proofImage && (
+        {!selectedItems.length && request.proofImage && (
           <div className="mb-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">
               Proof Image
@@ -116,9 +245,6 @@ export default function RequestCard({
                 className="w-full max-h-56 object-contain rounded-xl border border-slate-200 bg-slate-50 hover:opacity-90 transition-opacity cursor-zoom-in"
               />
             </a>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Click image to open full size
-            </p>
           </div>
         )}
 
@@ -156,9 +282,17 @@ export default function RequestCard({
 
           <AnalyticsCard
             label="Best Action"
-            value={request.bestAction}
-            valueClassName="text-base font-bold text-slate-900 leading-snug"
-            subtitle="AI recommended"
+            value={displayBestAction}
+            valueClassName={`font-bold text-slate-900 leading-snug ${
+              displayBestAction === "Mixed Recommendations"
+                ? "text-sm"
+                : "text-base"
+            }`}
+            subtitle={
+              displayBestAction === "Mixed Recommendations"
+                ? "See item-level recommendations below"
+                : "AI recommended"
+            }
             subtitleClassName="text-xs text-slate-400 mt-1"
           />
         </div>

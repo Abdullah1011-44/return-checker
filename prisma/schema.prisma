@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  DELIVERED
+  CANCELLED
+}
+
+enum ReturnStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  RESOLVED
+}
+
+enum ReturnReason {
+  WRONG_SIZE
+  WRONG_COLOR
+  DAMAGED_ITEM
+  WRONG_ITEM
+  CHANGED_MIND
+  QUALITY_ISSUE
+  LATE_DELIVERY
+  OTHER
+}
+
+enum RecoveryOption {
+  EXCHANGE
+  STORE_CREDIT
+  PARTIAL_REFUND
+  DISCOUNT_TO_KEEP
+  FULL_REFUND
+  MANUAL_REVIEW
+}
+
+enum EligibilityStatus {
+  ELIGIBLE
+  NOT_ELIGIBLE
+  NEEDS_REVIEW
+}
+
+enum MerchantDecision {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_MORE_INFO
+}
+
+model Merchant {
+  id        String          @id @default(cuid())
+  shopName  String
+  email     String          @unique
+  orders    CustomerOrder[]
+  returns   ReturnRequest[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model CustomerOrder {
+  id             String          @id @default(cuid())
+  merchantId     String
+  merchant       Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  orderNumber    String
+  customerEmail  String
+  customerName   String
+  totalAmount    Decimal         @db.Decimal(10, 2)
+  status         OrderStatus     @default(PENDING)
+  deliveredAt    DateTime?
+  items          OrderItem[]
+  returnRequests ReturnRequest[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([merchantId, orderNumber])
+  @@index([merchantId])
+  @@index([customerEmail])
+  @@index([status])
+}
+
+model OrderItem {
+  id           String        @id @default(cuid())
+  orderId      String
+  order        CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productName  String
+  sku          String
+  quantity     Int
+  price        Decimal       @db.Decimal(10, 2)
+  isReturnable Boolean       @default(true)
+  returnItems  ReturnItem[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([orderId])
+}
+
+model ReturnRequest {
+  id            String        @id @default(cuid())
+  merchantId    String
+  merchant      Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  orderId       String
+  order         CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customerEmail String
+  status        ReturnStatus  @default(PENDING)
+  items         ReturnItem[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([merchantId])
+  @@index([orderId])
+  @@index([customerEmail])
+  @@index([status])
+}
+
+model ReturnItem {
+  id                String            @id @default(cuid())
+  returnRequestId   String
+  returnRequest     ReturnRequest     @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  orderItemId       String
+  orderItem         OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  reason            ReturnReason
+  comment           String?
+  selectedOption    RecoveryOption
+  aiRecommendation  String?
+  eligibilityStatus EligibilityStatus @default(NEEDS_REVIEW)
+  imageUrl          String?
+  merchantDecision  MerchantDecision  @default(PENDING)
+  merchantNote      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([returnRequestId])
+  @@index([orderItemId])
+}

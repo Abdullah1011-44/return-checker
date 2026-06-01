@@ -1,3 +1,5 @@
+import { buildOrderCheckResponse, findMockOrder } from "@/lib/mockOrders";
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -10,30 +12,20 @@ export async function POST(request) {
       );
     }
 
-    const cleanOrderNumber = orderNumber.replace("#", "").trim();
+    const order = findMockOrder(orderNumber, email);
 
-    // Known orders — eligibility only
-    const orders = [
-      { orderNumber: "1001", email: "test1@gmail.com", eligible: true },
-      { orderNumber: "1002", email: "test2@gmail.com", eligible: true },
-      { orderNumber: "1003", email: "test3@gmail.com", eligible: false },
-    ];
-
-    const match = orders.find(
-      (o) =>
-        o.orderNumber === cleanOrderNumber &&
-        o.email.toLowerCase() === email.toLowerCase()
-    );
-
-    if (!match) {
-      return Response.json({ success: true, status: "not_found" });
+    if (!order) {
+      return Response.json({
+        success: true,
+        orderFound: false,
+        orderNumber: orderNumber.replace("#", "").trim(),
+        customerEmail: email,
+        orderEligible: false,
+        items: [],
+      });
     }
 
-    if (match.eligible) {
-      return Response.json({ success: true, status: "approved" });
-    }
-
-    return Response.json({ success: true, status: "rejected" });
+    return Response.json(buildOrderCheckResponse(order));
   } catch {
     return Response.json(
       { success: false, message: "Something went wrong." },
