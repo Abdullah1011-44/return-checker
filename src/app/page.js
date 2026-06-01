@@ -186,22 +186,24 @@ export default function Home() {
     });
 
     try {
+      const res = await fetch("/api/submit-return", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderNumber, email, returnRequestItems }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setError(data.message || "Something went wrong. Please try again.");
+        return;
+      }
+
       const newRequest = buildReturnRequest({
         orderNumber,
         email,
         returnRequestItems,
       });
       addReturnRequest(newRequest);
-
-      try {
-        await fetch("/api/submit-return", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderNumber, email, returnRequestItems }),
-        });
-      } catch {
-        // localStorage is the source of truth
-      }
 
       setSubmittedItems(returnRequestItems);
       setStep("confirm");
