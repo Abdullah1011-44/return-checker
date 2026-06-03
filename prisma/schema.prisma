@@ -1,12 +1,21 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Return Recovery Copilot — Prisma Schema
+// MVP-ready. Shopify OAuth fields stubbed. Auth via Clerk (clerkId on MerchantUser).
+// ─────────────────────────────────────────────────────────────────────────────
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
 
 enum OrderStatus {
   PENDING
@@ -17,11 +26,11 @@ enum OrderStatus {
 }
 
 enum ReturnStatus {
-  PENDING
-  IN_REVIEW
-  APPROVED
-  REJECTED
-  RESOLVED
+  PENDING // just submitted by customer
+  IN_REVIEW // merchant opened it
+  APPROVED // merchant approved
+  REJECTED // merchant rejected
+  RESOLVED // fully closed
 }
 
 enum ReturnReason {
@@ -57,88 +66,328 @@ enum MerchantDecision {
   NEEDS_MORE_INFO
 }
 
-model Merchant {
-  id        String          @id @default(cuid())
-  shopName  String
-  email     String          @unique
-  orders    CustomerOrder[]
-  returns   ReturnRequest[]
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
 }
 
+enum MerchantUserRole {
+  OWNER // full access, billing
+  ADMIN // full access, no billing
+  MEMBER // read + act, no settings
+}
+
+enum PlanTier {
+  FREE
+  STARTER // ~$49/mo
+  GROWTH // ~$149/mo
+  SCALE // ~$399/mo
+}
+
+enum EventType {
+  RETURN_SUBMITTED
+  STATUS_CHANGED
+  DECISION_MADE
+  NOTE_ADDED
+  AI_SCORED
+  ELIGIBILITY_CHECKED
+  IMAGE_UPLOADED
+  ESCALATED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MERCHANT
+// The store account. One Merchant = one Shopify store.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Merchant {
+  id    String @id @default(cuid())
+  email String @unique
+
+  // ── Store identity ──────────────────────────────────────────────
+  shopName    String
+  shopDomain  String? @unique // e.g. mybrand.myshopify.com
+  shopLogoUrl String? // for white-labelled portal later
+
+  // ── Shopify OAuth (stubbed for MVP — populate when you add OAuth) ─
+  shopifyAccessToken   String? // encrypted at rest
+  shopifyScope         String? // comma-separated Shopify scopes granted
+  shopifyWebhookSecret String? // for verifying incoming Shopify webhooks
+  shopifyInstalledAt   DateTime?
+  shopifyUninstalledAt DateTime?
+
+  // ── Plan & billing ──────────────────────────────────────────────
+  planTier    PlanTier  @default(FREE)
+  trialEndsAt DateTime?
+  isActive    Boolean   @default(true)
+
+  // ── Return policy rules (merchant-controlled) ───────────────────
+  returnWindowDays     Int     @default(30) // e.g. 30 = 30 days from delivery
+  allowExchange        Boolean @default(true)
+  allowStoreCredit     Boolean @default(true)
+  allowPartialRefund   Boolean @default(true)
+  allowKeepItem        Boolean @default(false)
+  maxStoreCreditBonus  Int     @default(15) // % bonus on store credit offer
+  maxPartialRefundPct  Int     @default(40) // max % refund without full refund
+  freeExchangeShipping Boolean @default(false)
+
+  // ── Currency ────────────────────────────────────────────────────
+  currency String @default("AUD")
+
+  // ── Timestamps ──────────────────────────────────────────────────
+  onboardedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // ── Relations ───────────────────────────────────────────────────
+  users          MerchantUser[]
+  orders         CustomerOrder[]
+  returnRequests ReturnRequest[]
+
+  @@index([shopDomain])
+  @@index([planTier])
+  @@index([isActive])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MERCHANT USER
+// A person who logs into the merchant dashboard.
+// One Merchant can have many MerchantUsers (owner + staff).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MerchantUser {
+  id         String   @id @default(cuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  // ── Auth (Clerk) ─────────────────────────────────────────────────
+  // clerkId links this record to a Clerk user object.
+  // If you switch to NextAuth, replace clerkId with a Session relation.
+  clerkId String @unique
+
+  // ── Identity ────────────────────────────────────────────────────
+  email     String
+  firstName String?
+  lastName  String?
+  avatarUrl String?
+
+  // ── Access control ──────────────────────────────────────────────
+  role     MerchantUserRole @default(MEMBER)
+  isActive Boolean          @default(true)
+
+  // ── Timestamps ──────────────────────────────────────────────────
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // ── Relations ───────────────────────────────────────────────────
+  returnEvents ReturnEvent[] // events this user triggered
+
+  @@index([merchantId])
+  @@index([clerkId])
+  @@index([email])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMER ORDER
+// Synced from Shopify or entered manually in MVP phase.
+// ─────────────────────────────────────────────────────────────────────────────
+
 model CustomerOrder {
-  id             String          @id @default(cuid())
-  merchantId     String
-  merchant       Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  orderNumber    String
+  id         String   @id @default(cuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  // ── Order identity ───────────────────────────────────────────────
+  orderNumber    String // e.g. "1001" or Shopify order name "#1001"
+  shopifyOrderId String? // Shopify's internal GID for later sync
   customerEmail  String
   customerName   String
-  totalAmount    Decimal         @db.Decimal(10, 2)
-  status         OrderStatus     @default(PENDING)
-  deliveredAt    DateTime?
+  customerPhone  String?
+
+  // ── Financials ───────────────────────────────────────────────────
+  totalAmount    Decimal  @db.Decimal(10, 2)
+  currency       String   @default("USD")
+  shippingAmount Decimal? @db.Decimal(10, 2)
+
+  // ── Lifecycle ────────────────────────────────────────────────────
+  status      OrderStatus @default(PENDING)
+  orderedAt   DateTime    @default(now()) // when customer placed order
+  deliveredAt DateTime? // when order was delivered — drives return window
+
+  // ── Timestamps ──────────────────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Relations ───────────────────────────────────────────────────
   items          OrderItem[]
   returnRequests ReturnRequest[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
 
   @@unique([merchantId, orderNumber])
   @@index([merchantId])
   @@index([customerEmail])
   @@index([status])
+  @@index([shopifyOrderId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORDER ITEM
+// Individual line items within an order.
+// ─────────────────────────────────────────────────────────────────────────────
 
 model OrderItem {
-  id           String        @id @default(cuid())
-  orderId      String
-  order        CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productName  String
-  sku          String
-  quantity     Int
-  price        Decimal       @db.Decimal(10, 2)
-  isReturnable Boolean       @default(true)
-  returnItems  ReturnItem[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id      String        @id @default(cuid())
+  orderId String
+  order   CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // ── Product identity ─────────────────────────────────────────────
+  productName      String
+  variantName      String? // e.g. "Blue / Size M"
+  sku              String
+  shopifyVariantId String? // for Shopify sync later
+
+  // ── Pricing & quantity ───────────────────────────────────────────
+  quantity Int
+  price    Decimal @db.Decimal(10, 2) // unit price
+
+  // ── Return eligibility rules ─────────────────────────────────────
+  isReturnable Boolean @default(true) // can be false for final-sale items
+
+  // ── Timestamps ──────────────────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Relations ───────────────────────────────────────────────────
+  returnItems ReturnItem[]
 
   @@index([orderId])
+  @@index([sku])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RETURN REQUEST
+// One return submission from a customer. Can cover multiple items.
+// Eligibility lives here — checked once for the whole request.
+// ─────────────────────────────────────────────────────────────────────────────
+
 model ReturnRequest {
-  id            String        @id @default(cuid())
-  merchantId    String
-  merchant      Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  orderId       String
-  order         CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id         String        @id @default(cuid())
+  merchantId String
+  merchant   Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  orderId    String
+  order      CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // ── Customer identity (denormalised for fast lookup) ─────────────
   customerEmail String
-  status        ReturnStatus  @default(PENDING)
-  items         ReturnItem[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  customerName  String?
+
+  // ── Eligibility (checked once at request level) ──────────────────
+  eligibilityStatus EligibilityStatus @default(NEEDS_REVIEW)
+  eligibilityReason String? // human-readable reason if NOT_ELIGIBLE
+
+  // ── Return window ────────────────────────────────────────────────
+  // Precomputed from deliveredAt + merchant.returnWindowDays
+  // Makes eligibility checks a simple DateTime comparison
+  windowExpiresAt DateTime?
+
+  // ── Request status ───────────────────────────────────────────────
+  status ReturnStatus @default(PENDING)
+
+  // ── Timestamps ──────────────────────────────────────────────────
+  submittedAt DateTime  @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // ── Relations ───────────────────────────────────────────────────
+  items  ReturnItem[]
+  events ReturnEvent[]
 
   @@index([merchantId])
   @@index([orderId])
   @@index([customerEmail])
   @@index([status])
+  @@index([eligibilityStatus])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RETURN ITEM
+// One line item inside a return request.
+// AI scoring, merchant decision, and proof image all live here.
+// ─────────────────────────────────────────────────────────────────────────────
+
 model ReturnItem {
-  id                String            @id @default(cuid())
-  returnRequestId   String
-  returnRequest     ReturnRequest     @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
-  orderItemId       String
-  orderItem         OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
-  reason            ReturnReason
-  comment           String?
-  selectedOption    RecoveryOption
-  aiRecommendation  String?
-  eligibilityStatus EligibilityStatus @default(NEEDS_REVIEW)
-  imageUrl          String?
-  merchantDecision  MerchantDecision  @default(PENDING)
-  merchantNote      String?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id              String        @id @default(cuid())
+  returnRequestId String
+  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  orderItemId     String
+  orderItem       OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  // ── Customer input ───────────────────────────────────────────────
+  reason         ReturnReason
+  comment        String? // customer's free-text description
+  selectedOption RecoveryOption // what the customer wants
+
+  // ── Proof image ──────────────────────────────────────────────────
+  // MVP: base64 data URI stored directly
+  // Production: swap for Cloudinary/Supabase Storage URL
+  imageUrl      String? // URL or base64 data URI
+  imageMimeType String? // e.g. "image/jpeg" — useful when decoding base64
+
+  // ── AI scoring (computed by recovery score engine) ───────────────
+  recoveryScore  Int? // 0–100 recovery probability
+  riskLevel      RiskLevel? // LOW | MEDIUM | HIGH
+  bestAction     String? // AI-recommended action label
+  aiSummary      String? // plain-language explanation for merchant
+  aiClassifiedAt DateTime? // when AI scoring last ran
+
+  // ── Merchant decision ────────────────────────────────────────────
+  merchantDecision MerchantDecision @default(PENDING)
+  merchantNote     String? // internal merchant note
+  decidedAt        DateTime? // when merchant made a decision
+
+  // ── Timestamps ──────────────────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([returnRequestId])
   @@index([orderItemId])
+  @@index([riskLevel])
+  @@index([merchantDecision])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RETURN EVENT
+// Immutable audit log. Every meaningful state change writes a row here.
+// Powers the timeline view on the merchant dashboard and dispute resolution.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ReturnEvent {
+  id              String        @id @default(cuid())
+  returnRequestId String
+  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+
+  // ── Who did it ───────────────────────────────────────────────────
+  // actorUserId is null when the event is system/AI-generated
+  actorUserId String?
+  actorUser   MerchantUser? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorType   String        @default("system") // "merchant" | "customer" | "system" | "ai"
+
+  // ── What happened ────────────────────────────────────────────────
+  eventType EventType
+  fromValue String? // previous value (e.g. "PENDING")
+  toValue   String? // new value     (e.g. "APPROVED")
+  note      String? // optional human-readable context
+
+  // ── Metadata (flexible JSON for future event payloads) ───────────
+  metadata Json?
+
+  // ── Timestamp (immutable — no updatedAt on audit rows) ──────────
+  createdAt DateTime @default(now())
+
+  @@index([returnRequestId])
+  @@index([actorUserId])
+  @@index([eventType])
+  @@index([createdAt])
 }
