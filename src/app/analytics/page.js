@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getReturnRequests } from "@/lib/returnRequests";
+import { useCallback, useEffect, useState } from "react";
 
 // Human-readable labels for return reason codes
 const reasonLabels = {
@@ -27,11 +26,25 @@ const ALL_OPTIONS = [
   "Manual Review",
 ];
 
-// Count requests that match a status
-function countByStatus(requests, status) {
+/** Resolve Prisma ReturnStatus from API payload (rawStatus preferred) */
+function getPrismaStatus(request) {
+  if (request.rawStatus) return request.rawStatus;
+
+  const uiToPrisma = {
+    "Pending Review": "PENDING",
+    "Manual Review": "IN_REVIEW",
+    Approved: "APPROVED",
+    "Needs Attention": "REJECTED",
+    Resolved: "RESOLVED",
+  };
+  return uiToPrisma[request.status] ?? request.status;
+}
+
+function countByPrismaStatus(requests, ...statuses) {
+  const set = new Set(statuses);
   let count = 0;
   for (const request of requests) {
-    if (request.status === status) count++;
+    if (set.has(getPrismaStatus(request))) count++;
   }
   return count;
 }
@@ -164,17 +177,39 @@ function BreakdownRow({ label, count, total }) {
 
 export default function AnalyticsPage() {
   const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const loadRequests = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const res = await fetch("/api/requests");
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setLoadError(data.message || "Failed to load analytics data.");
+        setRequests([]);
+        return;
+      }
+      setRequests(Array.isArray(data.requests) ? data.requests : []);
+    } catch {
+      setLoadError("Failed to load analytics data.");
+      setRequests([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    setRequests(getReturnRequests());
-  }, []);
+    loadRequests();
+  }, [loadRequests]);
 
   const total = requests.length;
   const hasData = total > 0;
 
-  const approved = countByStatus(requests, "Approved");
-  const pending = countByStatus(requests, "Pending Review");
-  const resolved = countByStatus(requests, "Resolved");
+  const approved = countByPrismaStatus(requests, "APPROVED");
+  const pending = countByPrismaStatus(requests, "PENDING", "IN_REVIEW");
+  const resolved = countByPrismaStatus(requests, "RESOLVED");
   const highRisk = countByField(requests, "riskLevel", "High");
 
   const recovered = approved + resolved;
@@ -230,7 +265,21 @@ export default function AnalyticsPage() {
           </a>
         </div>
 
-        {!hasData && (
+        {loading && (
+          <div className="text-center py-20 text-slate-400">
+            <p className="text-sm font-medium">Loading analytics…</p>
+          </div>
+        )}
+
+        {!loading && loadError && (
+          <div className="text-center py-12">
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 inline-block">
+              {loadError}
+            </p>
+          </div>
+        )}
+
+        {!loading && !loadError && !hasData && (
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm text-center py-20 px-6">
             <p className="text-4xl mb-3">📊</p>
             <p className="text-base font-semibold text-slate-700">
@@ -249,7 +298,7 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {hasData && (
+        {!loading && !loadError && hasData && (
           <>
             {/* Recovery rate highlight */}
             <div className="rounded-2xl border border-slate-200 bg-slate-900 text-white p-6 mb-6 shadow-sm">

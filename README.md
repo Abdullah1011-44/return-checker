@@ -1,5 +1,33 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
+## Database setup (Prisma + PostgreSQL)
+
+1. Copy `.env.example` to `.env` and set `DATABASE_URL` (and `DIRECT_URL` if you use Supabase pooling).
+
+2. Apply migrations (first time only):
+
+```bash
+npm run prisma:migrate:dev
+```
+
+3. Seed test data (one demo merchant + mock orders `1001`–`1003`):
+
+```bash
+npm run db:seed
+```
+
+This inserts the same order numbers, customer emails, SKUs, and prices used by `/api/check-return`, so `/api/submit-return` can find orders in PostgreSQL.
+
+**Test accounts after seeding:**
+
+| Order # | Email |
+|---------|--------|
+| 1001 | test1@gmail.com |
+| 1002 | test2@gmail.com |
+| 1003 | test3@gmail.com |
+
+Re-run `npm run db:seed` anytime to reset demo data (it deletes and recreates the demo merchant).
+
 ## Getting Started
 
 First, run the development server:

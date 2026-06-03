@@ -1,10 +1,110 @@
 "use client";
-import { useEffect, useState } from "react";
-import {
-  saveReturnRequests,
-  updateReturnRequestInStorage,
-} from "@/lib/returnRequests";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import RequestCard from "@/components/RequestCard";
+
+const STATUS_FILTERS = [
+  { id: "ALL", label: "All", statuses: null },
+  { id: "PENDING", label: "Pending", statuses: ["PENDING"] },
+  { id: "IN_REVIEW", label: "Needs Attention", statuses: ["IN_REVIEW"] },
+  { id: "APPROVED", label: "Approved", statuses: ["APPROVED"] },
+  { id: "RESOLVED", label: "Resolved", statuses: ["RESOLVED"] },
+  { id: "REJECTED", label: "Rejected", statuses: ["REJECTED"] },
+];
+
+function getPrismaStatus(request) {
+  if (request.rawStatus) return request.rawStatus;
+
+  const uiToPrisma = {
+    "Pending Review": "PENDING",
+    "Manual Review": "IN_REVIEW",
+    Approved: "APPROVED",
+    "Needs Attention": "REJECTED",
+    Resolved: "RESOLVED",
+  };
+  return uiToPrisma[request.status] ?? request.status;
+}
+
+function countForFilter(requests, filter) {
+  if (!filter.statuses) return requests.length;
+  return requests.filter((r) => filter.statuses.includes(getPrismaStatus(r))).length;
+}
+
+function matchesFilter(request, filter) {
+  if (!filter.statuses) return true;
+  return filter.statuses.includes(getPrismaStatus(request));
+}
+
+const SORT_OPTIONS = [
+  { id: "NEWEST", label: "Newest First" },
+  { id: "OLDEST", label: "Oldest First" },
+  { id: "PENDING_FIRST", label: "Pending First" },
+  { id: "APPROVED_FIRST", label: "Approved First" },
+  { id: "REJECTED_FIRST", label: "Rejected First" },
+  { id: "HIGH_RISK_FIRST", label: "High Risk First" },
+  { id: "LOW_RISK_FIRST", label: "Low Risk First" },
+];
+
+const DEFAULT_SORT = "NEWEST";
+
+function getCreatedAtMs(request) {
+  const ms = new Date(request.createdAt ?? 0).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+function statusSortRank(request, preferredStatuses) {
+  const status = getPrismaStatus(request);
+  const idx = preferredStatuses.indexOf(status);
+  return idx === -1 ? preferredStatuses.length : idx;
+}
+
+function riskSortRank(request, highFirst) {
+  const order = highFirst
+    ? { High: 0, Medium: 1, Low: 2 }
+    : { Low: 0, Medium: 1, High: 2 };
+  return order[request.riskLevel] ?? 1;
+}
+
+function sortRequests(requests, sortId) {
+  const list = [...requests];
+  const byNewestTiebreak = (a, b) => getCreatedAtMs(b) - getCreatedAtMs(a);
+
+  switch (sortId) {
+    case "OLDEST":
+      return list.sort((a, b) => getCreatedAtMs(a) - getCreatedAtMs(b));
+    case "PENDING_FIRST":
+      return list.sort((a, b) => {
+        const diff =
+          statusSortRank(a, ["PENDING", "IN_REVIEW"]) -
+          statusSortRank(b, ["PENDING", "IN_REVIEW"]);
+        return diff !== 0 ? diff : byNewestTiebreak(a, b);
+      });
+    case "APPROVED_FIRST":
+      return list.sort((a, b) => {
+        const diff =
+          statusSortRank(a, ["APPROVED"]) - statusSortRank(b, ["APPROVED"]);
+        return diff !== 0 ? diff : byNewestTiebreak(a, b);
+      });
+    case "REJECTED_FIRST":
+      return list.sort((a, b) => {
+        const diff =
+          statusSortRank(a, ["REJECTED"]) - statusSortRank(b, ["REJECTED"]);
+        return diff !== 0 ? diff : byNewestTiebreak(a, b);
+      });
+    case "HIGH_RISK_FIRST":
+      return list.sort((a, b) => {
+        const diff = riskSortRank(a, true) - riskSortRank(b, true);
+        return diff !== 0 ? diff : byNewestTiebreak(a, b);
+      });
+    case "LOW_RISK_FIRST":
+      return list.sort((a, b) => {
+        const diff = riskSortRank(a, false) - riskSortRank(b, false);
+        return diff !== 0 ? diff : byNewestTiebreak(a, b);
+      });
+    case "NEWEST":
+    default:
+      return list.sort(byNewestTiebreak);
+  }
+}
 
 // ── Risk-level colour maps ────────────────────────────────────────
 const riskConfig = {
@@ -34,80 +134,132 @@ const riskConfig = {
   },
 };
 
+/** Pick an action that preserves status when saving a note only */
+function actionForNoteSave(status) {
+  switch (status) {
+    case "Approved":
+      return "APPROVE";
+    case "Manual Review":
+      return "NEEDS_MORE_INFO";
+    case "Needs Attention":
+      return "REJECT";
+    case "Resolved":
+      return "RESOLVE";
+    default:
+      return "NEEDS_MORE_INFO";
+  }
+}
+
 // ── Dashboard Page ────────────────────────────────────────────────
 export default function Dashboard() {
   const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [updatingId, setUpdatingId] = useState(null);
+  const [actionErrors, setActionErrors] = useState({});
+  const [activeFilter, setActiveFilter] = useState("ALL");
+  const [sortOption, setSortOption] = useState(DEFAULT_SORT);
 
-  const pendingCount   = requests.filter((r) => r.status === "Pending Review").length;
-  const attentionCount = requests.filter((r) => r.status === "Needs Attention").length;
+  const pendingCount = countForFilter(requests, STATUS_FILTERS[1]);
+  const attentionCount = countForFilter(requests, STATUS_FILTERS[2]);
 
-  useEffect(() => {
+  const activeFilterDef =
+    STATUS_FILTERS.find((f) => f.id === activeFilter) ?? STATUS_FILTERS[0];
+
+  const filteredRequests = useMemo(
+    () => requests.filter((r) => matchesFilter(r, activeFilterDef)),
+    [requests, activeFilterDef]
+  );
+
+  const displayRequests = useMemo(
+    () => sortRequests(filteredRequests, sortOption),
+    [filteredRequests, sortOption]
+  );
+
+  const loadRequests = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
     try {
-      const savedRequests = JSON.parse(
-        localStorage.getItem("returnRequests") || "[]"
-      );
-      setRequests(Array.isArray(savedRequests) ? savedRequests : []);
+      const res = await fetch("/api/requests");
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setLoadError(data.message || "Failed to load return requests.");
+        setRequests([]);
+        return;
+      }
+      setRequests(Array.isArray(data.requests) ? data.requests : []);
     } catch {
+      setLoadError("Failed to load return requests.");
       setRequests([]);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
+  useEffect(() => {
+    loadRequests();
+  }, [loadRequests]);
+
   function handleRequestUpdated(updatedRequest) {
-    setRequests((prev) => {
-      const next = prev.map((r) =>
-        r.id === updatedRequest.id ? updatedRequest : r
-      );
-      saveReturnRequests(next);
-      return next;
-    });
+    setRequests((prev) =>
+      prev.map((r) => (r.id === updatedRequest.id ? updatedRequest : r))
+    );
   }
 
-  async function updateRequest(request, fields) {
-    const updated = {
-      ...request,
-      ...fields,
-      updatedAt: new Date().toISOString(),
-    };
-    updateReturnRequestInStorage(updated);
-    handleRequestUpdated(updated);
+  async function performAction(request, action, merchantNote) {
+    setUpdatingId(request.id);
+    setActionErrors((prev) => ({ ...prev, [request.id]: "" }));
 
     try {
-      await fetch("/api/update-request", {
+      const body = { action };
+      if (merchantNote !== undefined && merchantNote !== "") {
+        body.merchantNote = merchantNote;
+      }
+
+      const res = await fetch(`/api/requests/${request.id}/action`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: request.id, ...fields }),
+        body: JSON.stringify(body),
       });
-    } catch {
-      // localStorage already updated
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        const message = data.message || "Update failed.";
+        setActionErrors((prev) => ({ ...prev, [request.id]: message }));
+        throw new Error(message);
+      }
+
+      handleRequestUpdated(data.request);
+      await loadRequests();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Update failed.";
+      setActionErrors((prev) => ({ ...prev, [request.id]: message }));
+      throw error;
+    } finally {
+      setUpdatingId(null);
     }
   }
 
   function handleApprove(request) {
-    return () =>
-      updateRequest(request, {
-        status: "Approved",
-        merchantDecision: "Approved",
-      });
+    return (merchantNote) => performAction(request, "APPROVE", merchantNote);
+  }
+
+  function handleReject(request) {
+    return (merchantNote) => performAction(request, "REJECT", merchantNote);
   }
 
   function handleManualReview(request) {
-    return () =>
-      updateRequest(request, {
-        status: "Manual Review",
-        merchantDecision: "Manual Review",
-      });
+    return (merchantNote) => performAction(request, "NEEDS_MORE_INFO", merchantNote);
   }
 
   function handleResolve(request) {
-    return () =>
-      updateRequest(request, {
-        status: "Resolved",
-        merchantDecision: "Resolved",
-      });
+    return (merchantNote) => performAction(request, "RESOLVE", merchantNote);
   }
 
   function handleNoteChange(request) {
-    return (note) => updateRequest(request, { merchantNote: note });
+    return (merchantNote) =>
+      performAction(request, actionForNoteSave(request.status), merchantNote);
   }
 
   return (
@@ -154,7 +306,76 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {requests.length === 0 && (
+        {!loading && !loadError && requests.length > 0 && (
+          <div className="mb-6 flex flex-wrap items-center gap-2 justify-between">
+            <div className="flex flex-wrap gap-2">
+              {STATUS_FILTERS.map((filter) => {
+                const count = countForFilter(requests, filter);
+                const isActive = activeFilter === filter.id;
+
+                return (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    onClick={() => setActiveFilter(filter.id)}
+                    className={`inline-flex items-center gap-2 text-xs font-semibold rounded-full px-4 py-2 border shadow-sm transition-all duration-150
+                      ${
+                        isActive
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                  >
+                    {filter.label}
+                    <span
+                      className={`inline-flex min-w-[1.25rem] justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold
+                        ${
+                          isActive
+                            ? "bg-white/20 text-white"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <label className="inline-flex items-center gap-2 shrink-0">
+              <span className="text-xs font-medium text-slate-500 sr-only">
+                Sort requests
+              </span>
+              <select
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value)}
+                className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:border-slate-300 rounded-full px-4 py-2 shadow-sm transition-all duration-150 cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-1"
+                aria-label="Sort return requests"
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {loading && (
+          <div className="text-center py-20 text-slate-400">
+            <p className="text-sm font-medium">Loading return requests…</p>
+          </div>
+        )}
+
+        {!loading && loadError && (
+          <div className="text-center py-12">
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 inline-block">
+              {loadError}
+            </p>
+          </div>
+        )}
+
+        {!loading && !loadError && requests.length === 0 && (
           <div className="text-center py-20 text-slate-400">
             <p className="text-4xl mb-3">📭</p>
             <p className="text-sm font-medium">No return requests yet.</p>
@@ -162,8 +383,23 @@ export default function Dashboard() {
           </div>
         )}
 
+        {!loading && !loadError && requests.length > 0 && filteredRequests.length === 0 && (
+          <div className="text-center py-16 text-slate-400">
+            <p className="text-sm font-medium">No requests match this filter.</p>
+            <button
+              type="button"
+              onClick={() => setActiveFilter("ALL")}
+              className="mt-3 text-xs font-semibold text-slate-600 hover:text-slate-900 underline"
+            >
+              Show all requests
+            </button>
+          </div>
+        )}
+
         <div className="space-y-4">
-          {requests.map((request) => {
+          {!loading &&
+            !loadError &&
+            displayRequests.map((request) => {
             const risk =
               riskConfig[request.riskLevel] ?? riskConfig["Medium"];
 
@@ -172,7 +408,10 @@ export default function Dashboard() {
                 key={request.id}
                 request={request}
                 risk={risk}
+                isUpdating={updatingId === request.id}
+                actionError={actionErrors[request.id] || ""}
                 onApprove={handleApprove(request)}
+                onReject={handleReject(request)}
                 onManualReview={handleManualReview(request)}
                 onResolve={handleResolve(request)}
                 onNoteChange={handleNoteChange(request)}

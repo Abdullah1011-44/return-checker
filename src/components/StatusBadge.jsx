@@ -18,6 +18,10 @@ export default function StatusBadge({ status }) {
     if (normalizedStatus === "manual review") {
       badgeClass = "bg-red-100 text-red-700 border-red-200";
     }
+
+    if (normalizedStatus === "needs attention") {
+      badgeClass = "bg-red-100 text-red-700 border-red-200";
+    }
   
     return (
       <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${badgeClass}`}>

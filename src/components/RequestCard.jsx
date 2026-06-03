@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AnalyticsCard from "@/components/AnalyticsCard";
 import StatusBadge from "@/components/StatusBadge";
 import ProgressBar from "@/components/ProgressBar.jsx";
@@ -16,6 +16,12 @@ const reasonLabels = {
 
 function normalizeDashboardItem(item) {
   const returnReason = item.returnReason || "";
+  const proofSrc =
+    item.proofImage ||
+    (item.imageUrl?.startsWith("data:") || item.imageUrl?.startsWith("http")
+      ? item.imageUrl
+      : "");
+
   return {
     id: item.id || item.itemId,
     title: item.title,
@@ -26,7 +32,7 @@ function normalizeDashboardItem(item) {
     comment: item.comment || "",
     selectedOption: item.selectedOption || "",
     proofImageName: item.proofImageName || "",
-    proofImage: item.proofImage || "",
+    proofImage: proofSrc,
     recommendedAction:
       item.recommendedAction || getItemRecommendedAction(returnReason),
   };
@@ -65,7 +71,10 @@ function getSelectedItems(request) {
 export default function RequestCard({
   request,
   risk,
+  isUpdating = false,
+  actionError = "",
   onApprove,
+  onReject,
   onResolve,
   onManualReview,
   onNoteChange,
@@ -73,31 +82,38 @@ export default function RequestCard({
   const initials = request.email.slice(0, 2).toUpperCase();
 
   const [note, setNote] = useState(request.merchantNote || "");
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  async function runAction(action) {
-    setSaving(true);
+  useEffect(() => {
+    setNote(request.merchantNote || "");
+  }, [request.id, request.merchantNote]);
+
+  async function runAction(callback) {
+    if (isUpdating) return;
     setSaved(false);
     try {
-      await action();
+      await callback();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } finally {
-      setSaving(false);
+    } catch {
+      // Parent sets actionError
     }
   }
 
   function handleApprove() {
-    runAction(() => onApprove());
+    runAction(() => onApprove(note));
+  }
+
+  function handleReject() {
+    runAction(() => onReject(note));
   }
 
   function handleManualReview() {
-    runAction(() => onManualReview());
+    runAction(() => onManualReview(note));
   }
 
   function handleResolve() {
-    runAction(() => onResolve());
+    runAction(() => onResolve(note));
   }
 
   function handleSaveNote() {
@@ -312,36 +328,50 @@ export default function RequestCard({
           />
           <button
             onClick={handleSaveNote}
-            disabled={saving}
+            disabled={isUpdating}
             className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-all duration-150 disabled:opacity-40"
           >
-            {saving ? "Saving…" : saved ? "✓ Saved" : "Save Note"}
+            {isUpdating ? "Saving…" : saved ? "✓ Saved" : "Save Note"}
           </button>
         </div>
+
+        {actionError && (
+          <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            {actionError}
+          </p>
+        )}
 
         <div className="flex gap-2.5 flex-wrap">
           <button
             onClick={handleApprove}
-            disabled={request.status === "Approved"}
+            disabled={isUpdating || request.status === "Approved" || request.status === "Resolved"}
             className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-700 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-all duration-150"
           >
-            ✓ Approve
+            {isUpdating ? "Updating…" : "✓ Approve"}
+          </button>
+
+          <button
+            onClick={handleReject}
+            disabled={isUpdating || request.status === "Needs Attention" || request.status === "Resolved"}
+            className="inline-flex items-center gap-2 border border-red-200 hover:border-red-300 hover:bg-red-50 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-red-700 text-sm font-semibold px-4 py-2.5 rounded-xl transition-all duration-150"
+          >
+            {isUpdating ? "Updating…" : "✕ Reject"}
           </button>
 
           <button
             onClick={handleManualReview}
-            disabled={request.status === "Manual Review"}
+            disabled={isUpdating || request.status === "Manual Review" || request.status === "Resolved"}
             className="inline-flex items-center gap-2 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 text-sm font-semibold px-4 py-2.5 rounded-xl transition-all duration-150"
           >
-            👁 Manual Review
+            {isUpdating ? "Updating…" : "👁 Manual Review"}
           </button>
 
           <button
             onClick={handleResolve}
-            disabled={request.status === "Resolved"}
+            disabled={isUpdating || request.status === "Resolved"}
             className="inline-flex items-center gap-2 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-emerald-700 text-sm font-semibold px-4 py-2.5 rounded-xl transition-all duration-150"
           >
-            ✅ Resolve
+            {isUpdating ? "Updating…" : "✅ Resolve"}
           </button>
         </div>
 

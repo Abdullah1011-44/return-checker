@@ -27,6 +27,7 @@ function createEmptyItemDetail() {
     comment: "",
     selectedOption: "",
     proofImageName: "",
+    proofImage: "",
     imagePreview: "",
   };
 }
@@ -117,27 +118,40 @@ export default function Home() {
     if (!file) return;
 
     const preview = URL.createObjectURL(file);
-    setItemDetails((prev) => ({
-      ...prev,
-      [itemId]: {
-        ...createEmptyItemDetail(),
-        ...prev[itemId],
-        proofImageName: file.name,
-        imagePreview: preview,
-      },
-    }));
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      setItemDetails((prev) => ({
+        ...prev,
+        [itemId]: {
+          ...createEmptyItemDetail(),
+          ...prev[itemId],
+          proofImageName: file.name,
+          proofImage: dataUrl,
+          imagePreview: preview,
+        },
+      }));
+    };
+    reader.readAsDataURL(file);
   }
 
   function clearItemImage(itemId) {
-    setItemDetails((prev) => ({
-      ...prev,
-      [itemId]: {
-        ...createEmptyItemDetail(),
-        ...prev[itemId],
-        proofImageName: "",
-        imagePreview: "",
-      },
-    }));
+    setItemDetails((prev) => {
+      const existing = prev[itemId];
+      if (existing?.imagePreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(existing.imagePreview);
+      }
+      return {
+        ...prev,
+        [itemId]: {
+          ...createEmptyItemDetail(),
+          ...prev[itemId],
+          proofImageName: "",
+          proofImage: "",
+          imagePreview: "",
+        },
+      };
+    });
   }
 
   function getSelectedOrderItems() {
@@ -182,6 +196,7 @@ export default function Home() {
         comment: details.comment,
         selectedOption: details.selectedOption,
         proofImageName: details.proofImageName,
+        proofImage: details.proofImage,
       };
     });
 
