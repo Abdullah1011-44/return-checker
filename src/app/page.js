@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { addReturnRequest, buildReturnRequest } from "@/lib/returnRequests";
+import { buildStatusTrackingUrl } from "@/lib/statusTrackingUrl";
 
 // ── Step indicator ───────────────────────────────────────────────
 function StepBadge({ step, label }) {
@@ -266,14 +267,19 @@ export default function Home() {
             <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
             <div className="absolute -right-2 -bottom-8 w-16 h-16 rounded-full bg-white/5 pointer-events-none" />
             <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-1 relative z-10">
-              Shopify · Return Checker
+              Return Recovery Copilot
             </p>
             <h1 className="text-white text-2xl font-bold tracking-tight relative z-10">
-              {step === "check" && "Check Your Return"}
+              {step === "check" && "Returns Portal"}
               {step === "items" && "Select Items"}
               {step === "details" && "Tell Us More"}
               {step === "confirm" && "Request Submitted"}
             </h1>
+            {step === "check" && (
+              <p className="text-slate-300 text-sm mt-2 relative z-10 leading-relaxed">
+                Exchange, return, or track an existing request.
+              </p>
+            )}
           </div>
 
           <div className="px-8 py-8">
@@ -330,7 +336,7 @@ export default function Home() {
                       Checking…
                     </>
                   ) : (
-                    <>Check Return Status <span className="opacity-70">→</span></>
+                    <>Check Return Eligibility <span className="opacity-70">→</span></>
                   )}
                 </button>
 
@@ -606,7 +612,7 @@ export default function Home() {
                       Submitting…
                     </>
                   ) : (
-                    <>Submit Request to Merchant <span className="opacity-70">→</span></>
+                    <>Submit Return Request <span className="opacity-70">→</span></>
                   )}
                 </button>
 
@@ -678,7 +684,13 @@ export default function Home() {
                   ))}
                 </div>
 
-                <div className="border-t border-slate-100 pt-4">
+                <div className="border-t border-slate-100 pt-4 space-y-2">
+                  <a
+                    href={buildStatusTrackingUrl(orderNumber, email)}
+                    className="w-full py-3 px-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300 active:scale-[0.98] text-slate-700 text-sm font-semibold transition-all duration-150 flex items-center justify-center"
+                  >
+                    Track Return Status →
+                  </a>
                   <button
                     onClick={handleReset}
                     className="w-full py-3 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98] text-slate-600 hover:text-slate-800 text-sm font-semibold transition-all duration-150 flex items-center justify-center gap-2 group"
@@ -694,6 +706,11 @@ export default function Home() {
         </div>
 
         <p className="text-center text-xs text-slate-400 mt-5">
+          Already submitted a return?{" "}
+          <a href="/status" className="underline hover:text-slate-600 transition-colors">
+            Track Return Status
+          </a>
+          {" · "}
           Need help?{" "}
           <a href="#" className="underline hover:text-slate-600 transition-colors">
             Contact support

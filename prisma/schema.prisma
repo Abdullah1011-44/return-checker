@@ -122,6 +122,7 @@ model Merchant {
   trialEndsAt DateTime?
   isActive    Boolean   @default(true)
 
+
   // ── Return policy rules (merchant-controlled) ───────────────────
   returnWindowDays     Int     @default(30) // e.g. 30 = 30 days from delivery
   allowExchange        Boolean @default(true)

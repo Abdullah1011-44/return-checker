@@ -22,6 +22,14 @@ export default function StatusBadge({ status }) {
     if (normalizedStatus === "needs attention") {
       badgeClass = "bg-red-100 text-red-700 border-red-200";
     }
+
+    if (normalizedStatus === "rejected") {
+      badgeClass = "bg-red-100 text-red-700 border-red-200";
+    }
+
+    if (normalizedStatus === "needs more info") {
+      badgeClass = "bg-amber-100 text-amber-800 border-amber-200";
+    }
   
     return (
       <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${badgeClass}`}>
