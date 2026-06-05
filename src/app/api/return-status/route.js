@@ -25,11 +25,13 @@ export async function POST(request) {
     const normalizedOrderNumber = normalizeOrderNumber(orderNumber);
     const normalizedEmail = normalizeEmail(email);
 
+    // Public customer lookup — scoped to order number + customer email only
     const returnRequest = await prisma.returnRequest.findFirst({
       where: {
         customerEmail: normalizedEmail,
         order: {
           orderNumber: normalizedOrderNumber,
+          customerEmail: normalizedEmail,
         },
       },
       orderBy: { submittedAt: "desc" },

@@ -10,7 +10,8 @@
     "format": "biome format --write",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "db:seed:shopify": "node prisma/seed-shopify-merchant-orders.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

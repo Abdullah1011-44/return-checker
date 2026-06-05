@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import {
   mapReturnRequestToDashboard,
   mapUiMerchantDecisionToPrisma,
   mapUiStatusToPrisma,
 } from "@/lib/dashboardMapper";
+import { requireMerchantForRoute } from "@/lib/merchantApi";
+import { prisma } from "@/lib/prisma";
 
 async function logReturnEvent(returnRequestId, data) {
   await prisma.returnEvent.create({
@@ -17,6 +18,12 @@ async function logReturnEvent(returnRequestId, data) {
 
 export async function PATCH(request) {
   try {
+    const auth = await requireMerchantForRoute();
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const { merchant } = auth;
     const body = await request.json();
     const { id, status, merchantNote, merchantDecision } = body;
 
@@ -27,8 +34,11 @@ export async function PATCH(request) {
       );
     }
 
-    const existing = await prisma.returnRequest.findUnique({
-      where: { id },
+    const existing = await prisma.returnRequest.findFirst({
+      where: {
+        id,
+        merchantId: merchant.id,
+      },
       include: {
         order: true,
         items: { include: { orderItem: true } },
@@ -82,8 +92,11 @@ export async function PATCH(request) {
     }
 
     if (prismaStatus) {
-      await prisma.returnRequest.update({
-        where: { id },
+      await prisma.returnRequest.updateMany({
+        where: {
+          id,
+          merchantId: merchant.id,
+        },
         data: {
           status: prismaStatus,
           ...(prismaStatus === "RESOLVED" ? { resolvedAt: new Date() } : {}),
@@ -99,8 +112,11 @@ export async function PATCH(request) {
       });
     }
 
-    const updated = await prisma.returnRequest.findUnique({
-      where: { id },
+    const updated = await prisma.returnRequest.findFirst({
+      where: {
+        id,
+        merchantId: merchant.id,
+      },
       include: {
         order: { include: { items: true } },
         items: { include: { orderItem: true } },

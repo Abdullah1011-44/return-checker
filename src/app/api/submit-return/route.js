@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
+import {
+  findCustomerOrderForReturn,
+  orderNotFoundMessage,
+  resolveMerchantForCustomerFlow,
+} from "@/lib/orderLookup";
 import { prisma } from "@/lib/prisma";
 import {
   guessImageMimeType,
   mapRecoveryOption,
   mapReturnReason,
-  normalizeEmail,
-  normalizeOrderNumber,
 } from "@/lib/returnApiMappers";
 import {
   bestActionForReason,
@@ -51,28 +54,33 @@ export async function POST(request) {
       );
     }
 
-    const normalizedOrderNumber = normalizeOrderNumber(orderNumber);
-    const normalizedEmail = normalizeEmail(email);
+    const merchant = await resolveMerchantForCustomerFlow();
 
-    const order = await prisma.customerOrder.findFirst({
-      where: {
-        orderNumber: normalizedOrderNumber,
-        customerEmail: normalizedEmail,
-      },
-      include: {
-        items: true,
-        merchant: true,
-      },
+    const order = await findCustomerOrderForReturn({
+      orderNumber,
+      email,
+      merchant,
     });
 
     if (!order) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Order not found. Please check your order number and email address.",
+          message: orderNotFoundMessage(merchant),
         },
         { status: 404 }
+      );
+    }
+
+    const merchantId = merchant?.id ?? order.merchantId;
+
+    if (merchant && order.merchantId !== merchant.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Order does not belong to the current merchant.",
+        },
+        { status: 403 }
       );
     }
 
@@ -144,7 +152,7 @@ export async function POST(request) {
 
     const returnRequest = await prisma.returnRequest.create({
       data: {
-        merchantId: order.merchantId,
+        merchantId,
         orderId: order.id,
         customerEmail: order.customerEmail,
         customerName: order.customerName,

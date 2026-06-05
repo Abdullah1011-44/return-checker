@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
+import { requireMerchantForRoute } from "@/lib/merchantApi";
+import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
+    const auth = await requireMerchantForRoute();
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const { merchant } = auth;
+
     const returnRequests = await prisma.returnRequest.findMany({
+      where: { merchantId: merchant.id },
       orderBy: { submittedAt: "desc" },
       include: {
         order: {

@@ -1,18 +1,17 @@
 const { PrismaClient } = require("@prisma/client");
-const seedOrders = require("./seed-data");
+const {
+  buildOrderCreateData,
+  seedMerchantOrders,
+  seedOrders,
+} = require("./seed-helpers");
 
 const prisma = new PrismaClient();
 
 const MERCHANT_EMAIL = "demo@returnchecker.shop";
 const MERCHANT_SHOP_NAME = "Return Checker Demo";
+const SHOPIFY_SHOP_DOMAIN = "return-ai-saas.myshopify.com";
 
-function orderTotal(items) {
-  return items.reduce((sum, item) => sum + item.price, 0);
-}
-
-async function main() {
-  console.log("Seeding database…");
-
+async function seedDemoMerchant() {
   const existing = await prisma.merchant.findUnique({
     where: { email: MERCHANT_EMAIL },
   });
@@ -27,23 +26,7 @@ async function main() {
       shopName: MERCHANT_SHOP_NAME,
       email: MERCHANT_EMAIL,
       orders: {
-        create: seedOrders.map((order) => ({
-          orderNumber: order.orderNumber,
-          customerEmail: order.email.trim().toLowerCase(),
-          customerName: `Test Customer (${order.orderNumber})`,
-          totalAmount: orderTotal(order.items),
-          status: "DELIVERED",
-          deliveredAt: new Date(),
-          items: {
-            create: order.items.map((item) => ({
-              productName: item.title,
-              sku: item.sku,
-              quantity: item.quantity,
-              price: item.price,
-              isReturnable: item.returnable,
-            })),
-          },
-        })),
+        create: seedOrders.map((order) => buildOrderCreateData(order)),
       },
     },
     include: {
@@ -59,6 +42,34 @@ async function main() {
       `  Order #${order.orderNumber} · ${order.customerEmail} · ${order.items.length} items`
     );
   }
+}
+
+async function seedShopifyMerchantOrders() {
+  console.log(`\nSeeding Shopify merchant orders (${SHOPIFY_SHOP_DOMAIN})…`);
+
+  const merchant = await prisma.merchant.findUnique({
+    where: { shopDomain: SHOPIFY_SHOP_DOMAIN },
+  });
+
+  if (!merchant) {
+    console.log(
+      `  Skipped — no merchant with shopDomain "${SHOPIFY_SHOP_DOMAIN}".`
+    );
+    console.log(
+      "  Run Shopify OAuth install first, then: npm run db:seed:shopify"
+    );
+    return;
+  }
+
+  console.log(`Merchant: ${merchant.shopName} (${merchant.shopDomain})`);
+  await seedMerchantOrders(prisma, merchant);
+}
+
+async function main() {
+  console.log("Seeding database…");
+
+  await seedDemoMerchant();
+  await seedShopifyMerchantOrders();
 
   console.log("\nSeed complete. Test with:");
   console.log("  Order 1001 / test1@gmail.com");

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
+import { requireMerchantForRoute } from "@/lib/merchantApi";
+import { prisma } from "@/lib/prisma";
 
 const VALID_ACTIONS = ["APPROVE", "REJECT", "NEEDS_MORE_INFO", "RESOLVE"];
 
@@ -44,6 +45,12 @@ function resolveItemDecision(action, currentDecision) {
 
 export async function PATCH(request, { params }) {
   try {
+    const auth = await requireMerchantForRoute();
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const { merchant } = auth;
     const { id } = await params;
     const body = await request.json();
     const { action, merchantNote } = body;
@@ -65,8 +72,11 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    const existing = await prisma.returnRequest.findUnique({
-      where: { id },
+    const existing = await prisma.returnRequest.findFirst({
+      where: {
+        id,
+        merchantId: merchant.id,
+      },
       include: requestInclude,
     });
 
@@ -98,8 +108,11 @@ export async function PATCH(request, { params }) {
         });
       }
 
-      await tx.returnRequest.update({
-        where: { id },
+      await tx.returnRequest.updateMany({
+        where: {
+          id,
+          merchantId: merchant.id,
+        },
         data: {
           status: config.status,
           ...(action === "RESOLVE" ? { resolvedAt: now } : {}),
@@ -130,8 +143,11 @@ export async function PATCH(request, { params }) {
       });
     });
 
-    const updated = await prisma.returnRequest.findUnique({
-      where: { id },
+    const updated = await prisma.returnRequest.findFirst({
+      where: {
+        id,
+        merchantId: merchant.id,
+      },
       include: requestInclude,
     });
 

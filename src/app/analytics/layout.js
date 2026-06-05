@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
-import { getCurrentMerchant } from "@/lib/auth";
+import { requireMerchant } from "@/lib/auth";
 
 export default async function AnalyticsLayout({ children }) {
-  const merchant = await getCurrentMerchant();
-  if (!merchant) {
+  try {
+    await requireMerchant();
+  } catch {
     redirect("/");
   }
   return children;

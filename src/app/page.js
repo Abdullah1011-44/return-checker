@@ -71,7 +71,10 @@ export default function Home() {
         setSelectedItemIds([]);
         setStep("items");
       } else {
-        setError("Order not found. Please check your order number and email.");
+        setError(
+          data.message ||
+            "Order not found. Please check your order number and email."
+        );
       }
     } catch {
       setError("Something went wrong. Please try again.");
