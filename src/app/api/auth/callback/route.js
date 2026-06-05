@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { createMerchantSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   exchangeAuthorizationCode,
@@ -19,7 +20,7 @@ import {
  * 3. Verify HMAC via @shopify/shopify-api
  * 4. Exchange code for access token (server-side only)
  * 5. Upsert Merchant in Prisma
- * 6. Clear state cookie → redirect to /dashboard
+ * 6. Create merchant session → clear state cookie → redirect to /dashboard
  */
 export async function GET(request) {
   try {
@@ -92,12 +93,14 @@ export async function GET(request) {
       code
     );
 
-    await upsertMerchantFromOAuth(
+    const merchant = await upsertMerchantFromOAuth(
       prisma,
       shopCheck.shop,
       accessToken,
       scope
     );
+
+    await createMerchantSession(merchant);
 
     cookieStore.delete(SHOPIFY_OAUTH_STATE_COOKIE);
 
