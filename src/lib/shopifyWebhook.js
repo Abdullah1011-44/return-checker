@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { optionalEnv } from "@/lib/env";
 
 /**
  * Shopify webhook HMAC verification.
@@ -57,7 +58,7 @@ export function getShopifyWebhookHeaders(request) {
  * @returns {{ valid: true } | { valid: false, error: string }}
  */
 export function verifyShopifyWebhookHmac(rawBody, hmacHeader) {
-  const secret = process.env.SHOPIFY_API_SECRET?.trim();
+  const secret = optionalEnv("SHOPIFY_API_SECRET", "");
 
   if (!secret) {
     return { valid: false, error: "Invalid webhook HMAC" };

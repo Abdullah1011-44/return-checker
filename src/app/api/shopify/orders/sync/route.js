@@ -30,7 +30,9 @@ export async function POST() {
       pagesFetched: result.pagesFetched,
     });
   } catch (error) {
-    console.error("[POST /api/shopify/orders/sync]", error);
+    console.error("[POST /api/shopify/orders/sync]", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
 
     if (
       error?.code === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED" ||

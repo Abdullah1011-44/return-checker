@@ -1,3 +1,4 @@
+import { optionalEnv } from "@/lib/env";
 import { Resend } from "resend";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,20 +25,20 @@ function isValidEmail(value) {
  * Never logs RESEND_API_KEY or stack traces.
  */
 export async function sendEmail({ to, subject, html, text }) {
+  const resendApiKey = optionalEnv("RESEND_API_KEY", "");
+  const emailFrom = optionalEnv("EMAIL_FROM", "");
+
   console.log("[Email] sendEmail called", {
-    hasApiKey: Boolean(process.env.RESEND_API_KEY),
-    hasFrom: Boolean(process.env.EMAIL_FROM),
+    hasApiKey: Boolean(resendApiKey),
+    hasFrom: Boolean(emailFrom),
     toProvided: Boolean(to),
     subjectProvided: Boolean(subject),
   });
 
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.EMAIL_FROM?.trim();
-
-  if (!apiKey || !from) {
+  if (!resendApiKey || !emailFrom) {
     console.error("[Email] Missing config", {
-      hasApiKey: Boolean(process.env.RESEND_API_KEY),
-      hasFrom: Boolean(process.env.EMAIL_FROM),
+      hasApiKey: Boolean(resendApiKey),
+      hasFrom: Boolean(emailFrom),
     });
     return { success: false, error: "EMAIL_CONFIG_MISSING" };
   }
@@ -65,9 +66,9 @@ export async function sendEmail({ to, subject, html, text }) {
   }
 
   try {
-    const resend = new Resend(apiKey);
+    const resend = new Resend(resendApiKey);
     const result = await resend.emails.send({
-      from,
+      from: emailFrom,
       to: to.trim(),
       subject: subject.trim(),
       html: html ?? undefined,

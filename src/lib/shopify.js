@@ -1,25 +1,33 @@
 import "@shopify/shopify-api/adapters/node";
 import { ApiVersion, shopifyApi } from "@shopify/shopify-api";
+import { optionalEnv, requireEnv } from "@/lib/env";
 
 /** @type {import("@shopify/shopify-api").Shopify | null} */
 let shopify = null;
+
+function resolveAppUrl() {
+  const appUrl =
+    optionalEnv("SHOPIFY_APP_URL") || optionalEnv("APP_URL");
+
+  if (!appUrl) {
+    requireEnv("SHOPIFY_APP_URL");
+  }
+
+  return appUrl.replace(/\/$/, "");
+}
 
 /**
  * Load Shopify app configuration from environment variables.
  */
 export function getShopifyConfig() {
-  const apiKey = process.env.SHOPIFY_API_KEY;
-  const apiSecretKey = process.env.SHOPIFY_API_SECRET?.trim();
-  const scopes = process.env.SHOPIFY_SCOPES?.split(",")
+  const apiKey = requireEnv("SHOPIFY_API_KEY");
+  const apiSecretKey = requireEnv("SHOPIFY_API_SECRET");
+  const scopesString = optionalEnv("SHOPIFY_SCOPES", "read_orders");
+  const scopes = scopesString
+    .split(",")
     .map((scope) => scope.trim())
     .filter(Boolean);
-  const appUrl = process.env.SHOPIFY_APP_URL?.replace(/\/$/, "");
-
-  if (!apiKey || !apiSecretKey || !scopes?.length || !appUrl) {
-    throw new Error(
-      "Missing Shopify configuration. Set SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SHOPIFY_SCOPES, and SHOPIFY_APP_URL."
-    );
-  }
+  const appUrl = resolveAppUrl();
 
   const appUrlParsed = new URL(appUrl);
 

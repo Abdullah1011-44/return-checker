@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createMerchantSession } from "@/lib/auth";
+import { isDevelopment, isMissingEnvError } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import {
   exchangeAuthorizationCode,
@@ -107,11 +108,26 @@ export async function GET(request) {
     const dashboardUrl = new URL("/dashboard", appUrl);
     return NextResponse.redirect(dashboardUrl);
   } catch (error) {
-    console.error("[GET /api/auth/callback]", error);
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Shopify installation failed. Please try again.";
-    return NextResponse.json({ success: false, message }, { status: 500 });
+    console.error("[GET /api/auth/callback]", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+
+    if (isMissingEnvError(error)) {
+      if (isDevelopment()) {
+        console.error("[GET /api/auth/callback] config:", error.message);
+      }
+      return NextResponse.json(
+        { success: false, message: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Shopify installation failed. Please try again.",
+      },
+      { status: 500 }
+    );
   }
 }

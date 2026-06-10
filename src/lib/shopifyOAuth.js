@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { InvalidHmacError } from "@shopify/shopify-api";
+import { isDevelopment, optionalEnv } from "@/lib/env";
 import { getShopify, getShopifyConfig } from "@/lib/shopify";
 
 export const SHOPIFY_OAUTH_STATE_COOKIE = "shopify_oauth_state";
@@ -100,7 +101,7 @@ export function buildAuthorizeUrl({ shop, state, apiKey, scopes, redirectUri }) 
  * @see https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/authorization-code-grant
  */
 export async function verifyShopifyOAuthCallback(query) {
-  const isDev = process.env.NODE_ENV === "development";
+  const isDev = isDevelopment();
 
   if (!query.hmac) {
     return {
@@ -114,15 +115,17 @@ export async function verifyShopifyOAuthCallback(query) {
   try {
     const shopify = getShopify();
 
-    console.log("Shopify API version:", shopify.config.apiVersion);
-    console.log("OAuth query:", query);
+    if (isDev) {
+      console.log("[Shopify OAuth] validateHmac", {
+        apiVersion: shopify.config.apiVersion,
+        queryKeys: Object.keys(query).sort(),
+      });
+    }
 
     // Default signator "admin" — OAuth callbacks (not app proxy / webhooks)
     const valid = await shopify.utils.validateHmac(query, {
       signator: "admin",
     });
-
-    console.log("validateHmac result:", valid);
 
     if (!valid) {
       return {
@@ -137,7 +140,12 @@ export async function verifyShopifyOAuthCallback(query) {
     return { valid: true };
   } catch (error) {
     if (error instanceof InvalidHmacError) {
-      console.log("validateHmac InvalidHmacError:", error.message);
+      if (isDev) {
+        console.log("[Shopify OAuth] validateHmac failed", {
+          message: error.message,
+          queryKeys: Object.keys(query).sort(),
+        });
+      }
       return {
         valid: false,
         error: isDev ? error.message : "Invalid HMAC signature.",
@@ -194,7 +202,7 @@ export async function exchangeAuthorizationCode(shop, code) {
 export function oauthStateCookieOptions() {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: !isDevelopment(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 10,
@@ -210,8 +218,7 @@ export async function upsertMerchantFromOAuth(prisma, shop, accessToken, returne
   const shopName = shop.replace(SHOP_DOMAIN_SUFFIX, "") || shop;
   const installEmail = `auth+${shop}@shopify.install`;
 
-  const scopeValue =
-    returnedScopes ?? process.env.SHOPIFY_SCOPES ?? null;
+  const scopeValue = returnedScopes ?? optionalEnv("SHOPIFY_SCOPES", "read_orders");
 
   return prisma.merchant.upsert({
     where: { shopDomain: shop },

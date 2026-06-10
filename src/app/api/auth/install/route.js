@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { isDevelopment, isMissingEnvError } from "@/lib/env";
 import {
   buildAuthorizeUrl,
   generateOAuthState,
@@ -48,11 +49,23 @@ export async function GET(request) {
 
     return NextResponse.redirect(authorizeUrl);
   } catch (error) {
-    console.error("[GET /api/auth/install]", error);
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unable to start Shopify installation.";
-    return NextResponse.json({ success: false, message }, { status: 500 });
+    console.error("[GET /api/auth/install]", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+
+    if (isMissingEnvError(error)) {
+      if (isDevelopment()) {
+        console.error("[GET /api/auth/install] config:", error.message);
+      }
+      return NextResponse.json(
+        { success: false, message: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      { success: false, message: "Unable to start Shopify installation." },
+      { status: 500 }
+    );
   }
 }

@@ -1,5 +1,9 @@
-export const SHOPIFY_ADMIN_API_VERSION =
-  process.env.SHOPIFY_ADMIN_API_VERSION || "2026-04";
+import { optionalEnv } from "@/lib/env";
+
+export const SHOPIFY_ADMIN_API_VERSION = optionalEnv(
+  "SHOPIFY_ADMIN_API_VERSION",
+  "2026-04"
+);
 
 const MAX_RATE_LIMIT_RETRIES = 3;
 const DEFAULT_RETRY_AFTER_MS = 2000;

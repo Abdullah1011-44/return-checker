@@ -114,7 +114,7 @@ async function sendReturnActionEmail({
   });
 
   console.log("[Email Flow] Attempting customer email", {
-    to: customerEmail,
+    hasRecipient: Boolean(customerEmail),
     action,
     orderNumber,
   });
@@ -288,8 +288,9 @@ export async function PATCH(request, { params }) {
     console.log("[Email Flow] Full request loaded", {
       requestId: id,
       hasFullRequest: Boolean(updated),
-      customerEmail:
-        updated?.order?.customerEmail || updated?.customerEmail || null,
+      hasCustomerEmail: Boolean(
+        updated?.order?.customerEmail || updated?.customerEmail
+      ),
       orderNumber: updated?.order?.orderNumber || "Unknown",
       action,
     });
@@ -342,7 +343,9 @@ export async function PATCH(request, { params }) {
       },
     });
   } catch (error) {
-    console.error("[PATCH /api/requests/[id]/action]", error);
+    console.error("[PATCH /api/requests/[id]/action]", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
     return NextResponse.json(
       { success: false, message: "Something went wrong. Please try again." },
       { status: 500 }

@@ -202,7 +202,9 @@ export async function POST(request) {
       returnRequest: serializeReturnRequest(returnRequest),
     });
   } catch (error) {
-    console.error("[submit-return]", error);
+    console.error("[submit-return]", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
     return NextResponse.json(
       { success: false, message: "Something went wrong. Please try again." },
       { status: 500 }
