@@ -1,13 +1,24 @@
 import { NextResponse } from "next/server";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { syncShopifyOrders } from "@/lib/syncShopifyOrders";
 
 /**
  * Sync Shopify orders for the authenticated merchant only.
  * Request body is intentionally ignored — never pass merchantId from the client.
  */
-export async function POST() {
+export async function POST(request) {
   try {
+    const rateLimitResult = checkRateLimit(request, {
+      routeName: "shopify-order-sync",
+      limit: 5,
+      windowMs: 5 * 60 * 1000,
+    });
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     const auth = await requireMerchantForRoute();
     if (auth.response) {
       return NextResponse.json(

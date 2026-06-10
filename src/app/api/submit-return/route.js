@@ -18,6 +18,7 @@ import {
   riskPrismaForReason,
   scoreForReason,
 } from "@/lib/returnScoring";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { serializeProofImage } from "@/lib/proofImageUrl";
 import {
   parseJsonBody,
@@ -42,6 +43,16 @@ function serializeReturnRequest(request) {
 
 export async function POST(request) {
   try {
+    const rateLimitResult = checkRateLimit(request, {
+      routeName: "submit-return",
+      limit: 10,
+      windowMs: 60 * 1000,
+    });
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     const parsed = await parseJsonBody(request);
     if (!parsed.ok) {
       return parsed.response;

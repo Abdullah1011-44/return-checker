@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   logCustomerFromPayload,
   readVerifiedShopifyWebhook,
@@ -13,6 +14,16 @@ import {
  */
 export async function POST(request) {
   try {
+    const rateLimitResult = checkRateLimit(request, {
+      routeName: "webhook-customers-redact",
+      limit: 100,
+      windowMs: 60 * 1000,
+    });
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     const verified = await readVerifiedShopifyWebhook(request);
 
     if (!verified.ok) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   getShopifyWebhookHeaders,
   verifyShopifyWebhookHmac,
@@ -13,6 +14,16 @@ import {
  */
 export async function POST(request) {
   try {
+    const rateLimitResult = checkRateLimit(request, {
+      routeName: "webhook-app-uninstalled",
+      limit: 100,
+      windowMs: 60 * 1000,
+    });
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     const rawBody = await request.text();
     const headers = getShopifyWebhookHeaders(request);
     const hmacCheck = verifyShopifyWebhookHmac(rawBody, headers.hmac);

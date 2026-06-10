@@ -5,6 +5,7 @@ import {
   orderNotFoundMessage,
   resolveMerchantForCustomerFlow,
 } from "@/lib/orderLookup";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   checkReturnSchema,
   parseJsonBody,
@@ -13,6 +14,16 @@ import {
 
 export async function POST(request) {
   try {
+    const rateLimitResult = checkRateLimit(request, {
+      routeName: "check-return",
+      limit: 20,
+      windowMs: 60 * 1000,
+    });
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     const parsed = await parseJsonBody(request);
     if (!parsed.ok) {
       return parsed.response;

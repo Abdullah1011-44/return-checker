@@ -4,6 +4,7 @@ import { buildReturnStatusEmail } from "@/lib/emailTemplates";
 import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   merchantActionBodySchema,
   parseJsonBody,
@@ -179,6 +180,16 @@ async function logEmailAuditEvent({
 
 export async function PATCH(request, { params }) {
   try {
+    const rateLimitResult = checkRateLimit(request, {
+      routeName: "merchant-action",
+      limit: 30,
+      windowMs: 60 * 1000,
+    });
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     const auth = await requireMerchantForRoute();
     if (auth.response) {
       return auth.response;
