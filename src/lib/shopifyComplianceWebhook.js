@@ -1,4 +1,8 @@
-import { NextResponse } from "next/server";
+import {
+  createApiErrorResponse,
+  handleApiError,
+  logSafeError,
+} from "@/lib/errors";
 import {
   getShopifyWebhookHeaders,
   verifyShopifyWebhookHmac,
@@ -18,10 +22,7 @@ export async function readVerifiedShopifyWebhook(request) {
   if (!hmacCheck.valid) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { success: false, message: "Invalid webhook HMAC" },
-        { status: 401 }
-      ),
+      response: invalidWebhookHmacResponse(),
     };
   }
 
@@ -40,18 +41,33 @@ export function logComplianceWebhook(headers) {
   });
 }
 
+export function invalidWebhookHmacResponse() {
+  return createApiErrorResponse("Unauthorized", 401, "INVALID_WEBHOOK_HMAC");
+}
+
+export function logWebhookError(routeName, error, meta = {}) {
+  console.error("[Shopify Webhook]", {
+    route: routeName,
+    topic: meta.topic ?? null,
+    shopDomain: meta.shopDomain ?? null,
+  });
+
+  logSafeError(routeName, error);
+}
+
+export function handleWebhookRouteError(routeName, error, meta = {}) {
+  logWebhookError(routeName, error, meta);
+
+  return handleApiError(error, {
+    context: routeName,
+    fallbackMessage: "Webhook processing failed",
+    fallbackCode: "WEBHOOK_ERROR",
+  });
+}
+
 export function logCustomerFromPayload(payload) {
-  const customer = payload?.customer;
-  if (!customer) {
-    return;
-  }
-
-  if (customer.id != null) {
-    console.log("[shopify-compliance-webhook] customer id:", customer.id);
-  }
-
-  if (customer.email) {
-    console.log("[shopify-compliance-webhook] customer email:", customer.email);
+  if (payload?.customer) {
+    console.log("[shopify-compliance-webhook] customer data present in payload");
   }
 }
 

@@ -1,10 +1,27 @@
 import { NextResponse } from "next/server";
+import {
+  createApiErrorResponse,
+  handleApiError,
+  logSafeError,
+} from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   getShopifyWebhookHeaders,
   verifyShopifyWebhookHmac,
 } from "@/lib/shopifyWebhook";
+
+const ROUTE_NAME = "webhook-app-uninstalled";
+
+function logWebhookError(error, meta = {}) {
+  console.error("[Shopify Webhook]", {
+    route: ROUTE_NAME,
+    topic: meta.topic ?? null,
+    shopDomain: meta.shopDomain ?? null,
+  });
+
+  logSafeError(ROUTE_NAME, error);
+}
 
 /**
  * Shopify app lifecycle webhook: app/uninstalled
@@ -13,9 +30,11 @@ import {
  * without deleting records, return history, or exposing access tokens.
  */
 export async function POST(request) {
+  const webhookMeta = { topic: "app/uninstalled" };
+
   try {
     const rateLimitResult = checkRateLimit(request, {
-      routeName: "webhook-app-uninstalled",
+      routeName: ROUTE_NAME,
       limit: 100,
       windowMs: 60 * 1000,
     });
@@ -29,10 +48,7 @@ export async function POST(request) {
     const hmacCheck = verifyShopifyWebhookHmac(rawBody, headers.hmac);
 
     if (!hmacCheck.valid) {
-      return NextResponse.json(
-        { success: false, message: "Invalid webhook HMAC" },
-        { status: 401 }
-      );
+      return createApiErrorResponse("Unauthorized", 401, "INVALID_WEBHOOK_HMAC");
     }
 
     const payload = JSON.parse(rawBody);
@@ -44,9 +60,12 @@ export async function POST(request) {
       payload.domain ||
       null;
 
+    webhookMeta.topic = headers.topic ?? webhookMeta.topic;
+    webhookMeta.shopDomain = shopDomain;
+
     console.log("[shopify-app-uninstalled]", {
-      topic: headers.topic ?? "app/uninstalled",
-      shopDomain,
+      topic: webhookMeta.topic,
+      shopDomain: webhookMeta.shopDomain,
       webhookId: headers.webhookId,
     });
 
@@ -83,10 +102,12 @@ export async function POST(request) {
       topic: "app/uninstalled",
     });
   } catch (error) {
-    console.error("[webhook app/uninstalled]", error);
-    return NextResponse.json(
-      { success: false, message: "Webhook processing failed." },
-      { status: 500 }
-    );
+    logWebhookError(error, webhookMeta);
+
+    return handleApiError(error, {
+      context: ROUTE_NAME,
+      fallbackMessage: "Webhook processing failed",
+      fallbackCode: "WEBHOOK_ERROR",
+    });
   }
 }

@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
+  handleWebhookRouteError,
   readVerifiedShopifyWebhook,
   resolveShopDomain,
 } from "@/lib/shopifyComplianceWebhook";
+
+const ROUTE_NAME = "webhook-shop-redact";
 
 /**
  * Shopify-required privacy webhook: shop/redact
@@ -13,9 +16,11 @@ import {
  * Marks the merchant inactive without deleting records or return history.
  */
 export async function POST(request) {
+  const webhookMeta = { topic: "shop/redact" };
+
   try {
     const rateLimitResult = checkRateLimit(request, {
-      routeName: "webhook-shop-redact",
+      routeName: ROUTE_NAME,
       limit: 100,
       windowMs: 60 * 1000,
     });
@@ -32,6 +37,9 @@ export async function POST(request) {
 
     const { headers, payload } = verified;
     const shopDomain = resolveShopDomain(headers, payload);
+
+    webhookMeta.topic = headers.topic ?? webhookMeta.topic;
+    webhookMeta.shopDomain = shopDomain;
 
     if (shopDomain) {
       console.log("[shopify-compliance-webhook] shop domain:", shopDomain);
@@ -66,10 +74,6 @@ export async function POST(request) {
       topic: "shop/redact",
     });
   } catch (error) {
-    console.error("[webhook shop/redact]", error);
-    return NextResponse.json(
-      { success: false, message: "Webhook processing failed." },
-      { status: 500 }
-    );
+    return handleWebhookRouteError(ROUTE_NAME, error, webhookMeta);
   }
 }

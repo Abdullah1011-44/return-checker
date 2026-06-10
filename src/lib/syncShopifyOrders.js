@@ -104,11 +104,7 @@ function mapLineItemSku(lineItem) {
 }
 
 async function testShopifyConnection(shopDomain, accessToken) {
-  try {
-    await shopifyAdminRequest(shopDomain, accessToken, "/shop.json");
-  } catch {
-    throw new Error("Shopify connection test failed");
-  }
+  await shopifyAdminRequest(shopDomain, accessToken, "/shop.json");
 }
 
 async function fetchAllShopifyOrders(shopDomain, accessToken) {

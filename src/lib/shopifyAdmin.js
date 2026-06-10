@@ -56,14 +56,24 @@ export async function shopifyAdminRequest(
   let attempt = 0;
 
   while (attempt <= MAX_RATE_LIMIT_RETRIES) {
-    const response = await fetch(url, {
-      method,
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
-      body: body != null ? JSON.stringify(body) : undefined,
-    });
+    let response;
+
+    try {
+      response = await fetch(url, {
+        method,
+        headers: {
+          "X-Shopify-Access-Token": accessToken,
+          "Content-Type": "application/json",
+        },
+        body: body != null ? JSON.stringify(body) : undefined,
+      });
+    } catch (networkError) {
+      const error = new Error("Unable to connect to Shopify");
+      error.code = "SHOPIFY_NETWORK_ERROR";
+      error.endpoint = normalizedEndpoint;
+      error.cause = networkError;
+      throw error;
+    }
 
     if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
       const retryAfterMs = parseRetryAfterMs(
@@ -86,26 +96,33 @@ export async function shopifyAdminRequest(
     }
 
     if (!response.ok) {
-      console.error("[Shopify Admin API Error]", {
-        status: response.status,
-        statusText: response.statusText,
-        shopDomain,
-        endpoint: normalizedEndpoint,
-        body: bodyText.slice(0, 500),
-      });
-
       const isProtectedCustomerDataError =
         response.status === 403 &&
         bodyText.toLowerCase().includes("protected customer data");
+
+      console.error("[Shopify Admin API Error]", {
+        status: response.status,
+        shopDomain,
+        endpoint: normalizedEndpoint,
+        code: isProtectedCustomerDataError
+          ? "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED"
+          : "SHOPIFY_API_ERROR",
+        hasToken: Boolean(accessToken),
+      });
 
       if (isProtectedCustomerDataError) {
         const error = new Error("SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED");
         error.code = "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED";
         error.status = 403;
+        error.endpoint = normalizedEndpoint;
         throw error;
       }
 
-      throw new Error("Shopify Admin API request failed");
+      const error = new Error("Shopify Admin API request failed");
+      error.status = response.status;
+      error.code = "SHOPIFY_API_ERROR";
+      error.endpoint = normalizedEndpoint;
+      throw error;
     }
 
     return {
@@ -115,7 +132,11 @@ export async function shopifyAdminRequest(
     };
   }
 
-  throw new Error("Shopify Admin API request failed");
+  const error = new Error("Shopify Admin API request failed");
+  error.status = 429;
+  error.code = "SHOPIFY_API_ERROR";
+  error.endpoint = normalizedEndpoint;
+  throw error;
 }
 
 /**

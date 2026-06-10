@@ -1,3 +1,4 @@
+import { handleApiError } from "@/lib/errors";
 import { buildOrderCheckResponse, findMockOrder } from "@/lib/mockOrders";
 import {
   buildOrderCheckApiResponse,
@@ -76,10 +77,11 @@ export async function POST(request) {
       items: [],
       message: orderNotFoundMessage(null),
     });
-  } catch {
-    return Response.json(
-      { success: false, message: "Something went wrong. Please try again." },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleApiError(error, {
+      context: "check-return",
+      fallbackMessage: "Unable to check return eligibility. Please try again.",
+      fallbackCode: "CHECK_RETURN_ERROR",
+    });
   }
 }

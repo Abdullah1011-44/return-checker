@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { sendEmail } from "@/lib/email";
 import { buildReturnStatusEmail } from "@/lib/emailTemplates";
 import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
+import {
+  createApiErrorResponse,
+  handleApiError,
+  logSafeError,
+} from "@/lib/errors";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
@@ -87,14 +92,9 @@ async function sendReturnActionEmail({
     returnRequest?.order?.orderNumber || "Unknown";
 
   if (!customerEmail) {
-    console.log("[Email Flow] Email result", {
-      success: false,
-      error: "CUSTOMER_EMAIL_MISSING",
-    });
     return {
       sent: false,
       error: "CUSTOMER_EMAIL_MISSING",
-      customerEmail: "",
     };
   }
 
@@ -114,12 +114,6 @@ async function sendReturnActionEmail({
     items: mapReturnItemsForEmail(returnRequest),
   });
 
-  console.log("[Email Flow] Attempting customer email", {
-    hasRecipient: Boolean(customerEmail),
-    action,
-    orderNumber,
-  });
-
   const emailResult = await sendEmail({
     to: customerEmail,
     subject: emailContent.subject,
@@ -127,18 +121,12 @@ async function sendReturnActionEmail({
     text: emailContent.text,
   });
 
-  console.log("[Email Flow] Email result", {
-    success: emailResult.success,
-    error: emailResult.error || null,
-  });
-
   if (emailResult.success) {
-    return { sent: true, customerEmail };
+    return { sent: true };
   }
 
   return {
     sent: false,
-    customerEmail,
     error: emailResult.error ?? "EMAIL_SEND_FAILED",
   };
 }
@@ -159,7 +147,7 @@ async function logEmailAuditEvent({
         eventType: sent ? "CUSTOMER_EMAIL_SENT" : "CUSTOMER_EMAIL_FAILED",
         actorType: "SYSTEM",
         fromValue: null,
-        toValue: customerEmail || null,
+        toValue: customerEmail ? "[customer]" : null,
         note: sent
           ? "Customer notification email sent"
           : "Customer notification email failed",
@@ -173,8 +161,8 @@ async function logEmailAuditEvent({
         },
       },
     });
-  } catch {
-    console.error("[Audit] Email event failed");
+  } catch (auditError) {
+    logSafeError("merchant-action-email-audit", auditError);
   }
 }
 
@@ -192,7 +180,7 @@ export async function PATCH(request, { params }) {
 
     const auth = await requireMerchantForRoute();
     if (auth.response) {
-      return auth.response;
+      return createApiErrorResponse("Unauthorized", 401, "UNAUTHORIZED");
     }
 
     const { merchant } = auth;
@@ -226,9 +214,10 @@ export async function PATCH(request, { params }) {
     });
 
     if (!existing) {
-      return NextResponse.json(
-        { success: false, message: "Return request not found." },
-        { status: 404 }
+      return createApiErrorResponse(
+        "Return request not found",
+        404,
+        "RETURN_REQUEST_NOT_FOUND"
       );
     }
 
@@ -296,16 +285,6 @@ export async function PATCH(request, { params }) {
       include: requestInclude,
     });
 
-    console.log("[Email Flow] Full request loaded", {
-      requestId: id,
-      hasFullRequest: Boolean(updated),
-      hasCustomerEmail: Boolean(
-        updated?.order?.customerEmail || updated?.customerEmail
-      ),
-      orderNumber: updated?.order?.orderNumber || "Unknown",
-      action,
-    });
-
     let email = { sent: false };
 
     if (shouldSendEmailNotification(existing, action)) {
@@ -317,17 +296,10 @@ export async function PATCH(request, { params }) {
           statusLabel: config.label,
         });
       } catch (emailError) {
-        console.error("[PATCH /api/requests/[id]/action] email failed", {
-          message:
-            emailError instanceof Error ? emailError.message : "Unknown error",
-        });
+        logSafeError("merchant-action-email", emailError);
         email = {
           sent: false,
           error: "EMAIL_SEND_FAILED",
-          customerEmail:
-            updated.order?.customerEmail?.trim() ||
-            updated.customerEmail?.trim() ||
-            "",
         };
       }
 
@@ -335,7 +307,10 @@ export async function PATCH(request, { params }) {
         returnRequestId: id,
         action,
         status: config.status,
-        customerEmail: email.customerEmail ?? "",
+        customerEmail:
+          updated.order?.customerEmail?.trim() ||
+          updated.customerEmail?.trim() ||
+          "",
         emailResult: email,
       });
     }
@@ -344,22 +319,18 @@ export async function PATCH(request, { params }) {
       success: true,
       message: `Return request ${config.label.toLowerCase()} successfully.`,
       request: mapReturnRequestToDashboard(updated),
-      email: {
-        sent: email.sent === true,
-        ...(email.sent
-          ? {}
-          : email.error
-            ? { error: email.error }
-            : {}),
-      },
+      email:
+        email.sent === true
+          ? { sent: true }
+          : shouldSendEmailNotification(existing, action)
+            ? { sent: false, error: "Email notification failed" }
+            : { sent: false },
     });
   } catch (error) {
-    console.error("[PATCH /api/requests/[id]/action]", {
-      message: error instanceof Error ? error.message : "Unknown error",
+    return handleApiError(error, {
+      context: "merchant-action",
+      fallbackMessage: "Unable to update return request. Please try again.",
+      fallbackCode: "MERCHANT_ACTION_ERROR",
     });
-    return NextResponse.json(
-      { success: false, message: "Something went wrong. Please try again." },
-      { status: 500 }
-    );
   }
 }

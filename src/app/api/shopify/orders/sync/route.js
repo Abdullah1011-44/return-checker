@@ -1,13 +1,123 @@
 import { NextResponse } from "next/server";
+import {
+  AppError,
+  createApiErrorResponse,
+  handleApiError,
+  logSafeError,
+} from "@/lib/errors";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { syncShopifyOrders } from "@/lib/syncShopifyOrders";
+
+function isProtectedCustomerDataError(error) {
+  return (
+    error?.code === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED" ||
+    error?.message === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED"
+  );
+}
+
+function isShopifyNetworkError(error) {
+  if (error?.code === "SHOPIFY_NETWORK_ERROR") {
+    return true;
+  }
+
+  const cause = error?.cause;
+  if (cause && typeof cause === "object" && "code" in cause) {
+    const networkCodes = [
+      "ECONNREFUSED",
+      "ENOTFOUND",
+      "ETIMEDOUT",
+      "ECONNRESET",
+      "UND_ERR_CONNECT_TIMEOUT",
+    ];
+    if (networkCodes.includes(cause.code)) {
+      return true;
+    }
+  }
+
+  return error instanceof TypeError && /fetch failed/i.test(error.message);
+}
+
+function logShopifySyncError(context, error, meta = {}) {
+  console.error("[Shopify Sync]", {
+    context,
+    shopDomain: meta.shopDomain ?? null,
+    endpoint: error?.endpoint ?? meta.endpoint ?? null,
+    httpStatus: error?.status ?? null,
+    code: error?.code ?? null,
+    hasToken: meta.hasToken ?? null,
+  });
+
+  logSafeError(context, error);
+}
+
+function handleShopifySyncRouteError(error, meta = {}) {
+  logShopifySyncError("shopify-order-sync", error, meta);
+
+  if (isProtectedCustomerDataError(error)) {
+    return createApiErrorResponse(
+      "Shopify connection works, but order sync requires protected customer data access approval in Shopify Partner Dashboard.",
+      403,
+      "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
+      {
+        nextStep:
+          "Go to Shopify Partner Dashboard > App > API access > Protected customer data access, request access, make sure read_orders is included, then reinstall the app.",
+      }
+    );
+  }
+
+  if (error instanceof AppError) {
+    return createApiErrorResponse(error.message, error.status, error.code);
+  }
+
+  const httpStatus = error?.status;
+
+  if (httpStatus === 401 || httpStatus === 403) {
+    return createApiErrorResponse(
+      "Shopify permission required",
+      httpStatus,
+      "SHOPIFY_PERMISSION_REQUIRED"
+    );
+  }
+
+  if (httpStatus === 429) {
+    return createApiErrorResponse(
+      "Shopify rate limit reached. Please try again later.",
+      429,
+      "SHOPIFY_RATE_LIMIT"
+    );
+  }
+
+  if (httpStatus === 500 || httpStatus === 502 || httpStatus === 503) {
+    return createApiErrorResponse(
+      "Shopify is temporarily unavailable. Please try again later.",
+      502,
+      "SHOPIFY_UNAVAILABLE"
+    );
+  }
+
+  if (isShopifyNetworkError(error)) {
+    return createApiErrorResponse(
+      "Unable to connect to Shopify. Please try again.",
+      503,
+      "SHOPIFY_CONNECTION_ERROR"
+    );
+  }
+
+  return handleApiError(error, {
+    context: "shopify-order-sync",
+    fallbackMessage: "Unable to sync Shopify orders. Please try again.",
+    fallbackCode: "SHOPIFY_SYNC_ERROR",
+  });
+}
 
 /**
  * Sync Shopify orders for the authenticated merchant only.
  * Request body is intentionally ignored — never pass merchantId from the client.
  */
 export async function POST(request) {
+  let merchant = null;
+
   try {
     const rateLimitResult = checkRateLimit(request, {
       routeName: "shopify-order-sync",
@@ -21,13 +131,10 @@ export async function POST(request) {
 
     const auth = await requireMerchantForRoute();
     if (auth.response) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
+      return createApiErrorResponse("Unauthorized", 401, "UNAUTHORIZED");
     }
 
-    const { merchant } = auth;
+    merchant = auth.merchant;
     const result = await syncShopifyOrders(merchant.id);
 
     // TODO: Add merchant-level audit event support for Shopify sync.
@@ -41,36 +148,9 @@ export async function POST(request) {
       pagesFetched: result.pagesFetched,
     });
   } catch (error) {
-    console.error("[POST /api/shopify/orders/sync]", {
-      message: error instanceof Error ? error.message : "Unknown error",
+    return handleShopifySyncRouteError(error, {
+      shopDomain: merchant?.shopDomain,
+      hasToken: Boolean(merchant?.shopifyAccessToken),
     });
-
-    if (
-      error?.code === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED" ||
-      error?.message === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED"
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
-          error:
-            "Shopify connection works, but order sync requires protected customer data access approval in Shopify Partner Dashboard.",
-          nextStep:
-            "Go to Shopify Partner Dashboard > App > API access > Protected customer data access, request access, make sure read_orders is included, then reinstall the app.",
-        },
-        { status: 403 }
-      );
-    }
-
-    const payload = {
-      success: false,
-      error: "Unable to sync Shopify orders",
-    };
-
-    if (process.env.NODE_ENV !== "production" && error instanceof Error) {
-      payload.debug = error.message;
-    }
-
-    return NextResponse.json(payload, { status: 500 });
   }
 }

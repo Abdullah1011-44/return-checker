@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { createApiErrorResponse, handleApiError } from "@/lib/errors";
 import {
   findCustomerOrderForReturn,
-  orderNotFoundMessage,
   resolveMerchantForCustomerFlow,
 } from "@/lib/orderLookup";
 import { prisma } from "@/lib/prisma";
@@ -74,12 +74,10 @@ export async function POST(request) {
     });
 
     if (!order) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: orderNotFoundMessage(merchant),
-        },
-        { status: 404 }
+      return createApiErrorResponse(
+        "Order not found or not eligible for return",
+        404,
+        "ORDER_NOT_ELIGIBLE"
       );
     }
 
@@ -213,12 +211,10 @@ export async function POST(request) {
       returnRequest: serializeReturnRequest(returnRequest),
     });
   } catch (error) {
-    console.error("[submit-return]", {
-      message: error instanceof Error ? error.message : "Unknown error",
+    return handleApiError(error, {
+      context: "submit-return",
+      fallbackMessage: "Unable to submit return request. Please try again.",
+      fallbackCode: "SUBMIT_RETURN_ERROR",
     });
-    return NextResponse.json(
-      { success: false, message: "Something went wrong. Please try again." },
-      { status: 500 }
-    );
   }
 }

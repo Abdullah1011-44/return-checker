@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
+  handleWebhookRouteError,
   logCustomerFromPayload,
   readVerifiedShopifyWebhook,
   resolveShopDomain,
 } from "@/lib/shopifyComplianceWebhook";
+
+const ROUTE_NAME = "webhook-customers-redact";
 
 /**
  * Shopify-required privacy webhook: customers/redact
@@ -13,9 +16,11 @@ import {
  * acknowledge only — no blind deletes until a defined retention policy exists.
  */
 export async function POST(request) {
+  const webhookMeta = { topic: "customers/redact" };
+
   try {
     const rateLimitResult = checkRateLimit(request, {
-      routeName: "webhook-customers-redact",
+      routeName: ROUTE_NAME,
       limit: 100,
       windowMs: 60 * 1000,
     });
@@ -33,6 +38,9 @@ export async function POST(request) {
     const { headers, payload } = verified;
     const shopDomain = resolveShopDomain(headers, payload);
 
+    webhookMeta.topic = headers.topic ?? webhookMeta.topic;
+    webhookMeta.shopDomain = shopDomain;
+
     if (shopDomain) {
       console.log("[shopify-compliance-webhook] shop domain:", shopDomain);
     }
@@ -44,10 +52,6 @@ export async function POST(request) {
       topic: "customers/redact",
     });
   } catch (error) {
-    console.error("[webhook customers/redact]", error);
-    return NextResponse.json(
-      { success: false, message: "Webhook processing failed." },
-      { status: 500 }
-    );
+    return handleWebhookRouteError(ROUTE_NAME, error, webhookMeta);
   }
 }

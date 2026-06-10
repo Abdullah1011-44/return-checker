@@ -222,7 +222,11 @@ export default function Dashboard() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        if (data.code === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED") {
+        if (res.status === 429) {
+          setSyncError(
+            "Too many sync attempts. Please wait a few minutes and try again."
+          );
+        } else if (data.code === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED") {
           setSyncError(
             "Shopify connection works, but order sync needs Protected Customer Data access approval."
           );
