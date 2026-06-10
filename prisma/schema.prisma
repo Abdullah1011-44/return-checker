@@ -85,6 +85,7 @@ model CustomerOrder {
   returnRequests ReturnRequest[]
 
   @@unique([merchantId, orderNumber])
+  @@unique([merchantId, shopifyOrderId])
   @@index([merchantId])
   @@index([customerEmail])
   @@index([status])
@@ -101,11 +102,13 @@ model OrderItem {
   isReturnable     Boolean       @default(true)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
-  shopifyVariantId String?
-  variantName      String?
-  order            CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  returnItems      ReturnItem[]
+  shopifyLineItemId String?
+  shopifyVariantId  String?
+  variantName       String?
+  order             CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  returnItems       ReturnItem[]
 
+  @@unique([orderId, shopifyLineItemId])
   @@index([orderId])
   @@index([sku])
 }
@@ -169,7 +172,7 @@ model ReturnEvent {
   returnRequestId String
   actorUserId     String?
   actorType       String        @default("system")
-  eventType       EventType
+  eventType       String
   fromValue       String?
   toValue         String?
   note            String?
@@ -250,15 +253,4 @@ enum PlanTier {
   STARTER
   GROWTH
   SCALE
-}
-
-enum EventType {
-  RETURN_SUBMITTED
-  STATUS_CHANGED
-  DECISION_MADE
-  NOTE_ADDED
-  AI_SCORED
-  ELIGIBILITY_CHECKED
-  IMAGE_UPLOADED
-  ESCALATED
 }

@@ -5,18 +5,25 @@ import {
   orderNotFoundMessage,
   resolveMerchantForCustomerFlow,
 } from "@/lib/orderLookup";
+import {
+  checkReturnSchema,
+  parseJsonBody,
+  validationErrorResponse,
+} from "@/lib/validation";
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const { orderNumber, email } = body;
-
-    if (!orderNumber || !email) {
-      return Response.json(
-        { success: false, message: "Please enter order number and email." },
-        { status: 400 }
-      );
+    const parsed = await parseJsonBody(request);
+    if (!parsed.ok) {
+      return parsed.response;
     }
+
+    const validated = checkReturnSchema.safeParse(parsed.data);
+    if (!validated.success) {
+      return validationErrorResponse(validated.error);
+    }
+
+    const { orderNumber, email } = validated.data;
 
     const merchant = await resolveMerchantForCustomerFlow();
 
@@ -35,7 +42,7 @@ export async function POST(request) {
       return Response.json({
         success: true,
         orderFound: false,
-        orderNumber: orderNumber.replace("#", "").trim(),
+        orderNumber: orderNumber.replace(/^#/, ""),
         customerEmail: email,
         orderEligible: false,
         items: [],
@@ -52,7 +59,7 @@ export async function POST(request) {
     return Response.json({
       success: true,
       orderFound: false,
-      orderNumber: orderNumber.replace("#", "").trim(),
+      orderNumber: orderNumber.replace(/^#/, ""),
       customerEmail: email,
       orderEligible: false,
       items: [],

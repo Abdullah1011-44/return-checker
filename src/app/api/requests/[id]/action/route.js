@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
+import { sendEmail } from "@/lib/email";
+import { buildReturnStatusEmail } from "@/lib/emailTemplates";
 import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { prisma } from "@/lib/prisma";
-
-const VALID_ACTIONS = ["APPROVE", "REJECT", "NEEDS_MORE_INFO", "RESOLVE"];
+import {
+  merchantActionBodySchema,
+  parseJsonBody,
+  returnRequestIdSchema,
+  validationErrorResponse,
+} from "@/lib/validation";
 
 const ACTION_CONFIG = {
   APPROVE: {
@@ -32,6 +38,7 @@ const ACTION_CONFIG = {
 };
 
 const requestInclude = {
+  merchant: true,
   order: { include: { items: true } },
   items: { include: { orderItem: true } },
 };
@@ -43,6 +50,133 @@ function resolveItemDecision(action, currentDecision) {
   return ACTION_CONFIG[action].merchantDecision;
 }
 
+function shouldSendEmailNotification(existing, action) {
+  const config = ACTION_CONFIG[action];
+  const statusChanged = existing.status !== config.status;
+
+  const decisionsChanged = existing.items.some((item) => {
+    const nextDecision = resolveItemDecision(action, item.merchantDecision);
+    return item.merchantDecision !== nextDecision;
+  });
+
+  return statusChanged || decisionsChanged;
+}
+
+function mapReturnItemsForEmail(returnRequest) {
+  return returnRequest.items.map((returnItem) => ({
+    title: returnItem.orderItem?.productName ?? "Item",
+    productName: returnItem.orderItem?.productName ?? "Item",
+    sku: returnItem.orderItem?.sku ?? "",
+    quantity: returnItem.orderItem?.quantity ?? 1,
+  }));
+}
+
+async function sendReturnActionEmail({
+  returnRequest,
+  action,
+  merchantNote,
+  statusLabel,
+}) {
+  const customerEmail =
+    returnRequest?.order?.customerEmail?.trim() ||
+    returnRequest?.customerEmail?.trim() ||
+    null;
+
+  const orderNumber =
+    returnRequest?.order?.orderNumber || "Unknown";
+
+  if (!customerEmail) {
+    console.log("[Email Flow] Email result", {
+      success: false,
+      error: "CUSTOMER_EMAIL_MISSING",
+    });
+    return {
+      sent: false,
+      error: "CUSTOMER_EMAIL_MISSING",
+      customerEmail: "",
+    };
+  }
+
+  const emailContent = buildReturnStatusEmail({
+    customerEmail,
+    orderNumber,
+    merchantName:
+      returnRequest.merchant?.shopName ||
+      returnRequest.merchant?.shopDomain ||
+      "Return Recovery Copilot",
+    status: statusLabel,
+    action,
+    merchantNote:
+      merchantNote?.trim() ||
+      returnRequest.items.find((item) => item.merchantNote)?.merchantNote ||
+      "",
+    items: mapReturnItemsForEmail(returnRequest),
+  });
+
+  console.log("[Email Flow] Attempting customer email", {
+    to: customerEmail,
+    action,
+    orderNumber,
+  });
+
+  const emailResult = await sendEmail({
+    to: customerEmail,
+    subject: emailContent.subject,
+    html: emailContent.html,
+    text: emailContent.text,
+  });
+
+  console.log("[Email Flow] Email result", {
+    success: emailResult.success,
+    error: emailResult.error || null,
+  });
+
+  if (emailResult.success) {
+    return { sent: true, customerEmail };
+  }
+
+  return {
+    sent: false,
+    customerEmail,
+    error: emailResult.error ?? "EMAIL_SEND_FAILED",
+  };
+}
+
+async function logEmailAuditEvent({
+  returnRequestId,
+  action,
+  status,
+  customerEmail,
+  emailResult,
+}) {
+  try {
+    const sent = emailResult.sent === true;
+
+    await prisma.returnEvent.create({
+      data: {
+        returnRequestId,
+        eventType: sent ? "CUSTOMER_EMAIL_SENT" : "CUSTOMER_EMAIL_FAILED",
+        actorType: "SYSTEM",
+        fromValue: null,
+        toValue: customerEmail || null,
+        note: sent
+          ? "Customer notification email sent"
+          : "Customer notification email failed",
+        metadata: {
+          action,
+          status,
+          emailSent: sent,
+          ...(sent
+            ? {}
+            : { error: emailResult.error ?? "EMAIL_SEND_FAILED" }),
+        },
+      },
+    });
+  } catch {
+    console.error("[Audit] Email event failed");
+  }
+}
+
 export async function PATCH(request, { params }) {
   try {
     const auth = await requireMerchantForRoute();
@@ -51,26 +185,26 @@ export async function PATCH(request, { params }) {
     }
 
     const { merchant } = auth;
-    const { id } = await params;
-    const body = await request.json();
-    const { action, merchantNote } = body;
+    const { id: rawId } = await params;
 
-    if (!id) {
-      return NextResponse.json(
-        { success: false, message: "Return request ID is required." },
-        { status: 400 }
-      );
+    const idResult = returnRequestIdSchema.safeParse(rawId);
+    if (!idResult.success) {
+      return validationErrorResponse(idResult.error);
     }
 
-    if (!action || !VALID_ACTIONS.includes(action)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: `Invalid action. Use one of: ${VALID_ACTIONS.join(", ")}`,
-        },
-        { status: 400 }
-      );
+    const id = idResult.data;
+
+    const parsed = await parseJsonBody(request);
+    if (!parsed.ok) {
+      return parsed.response;
     }
+
+    const validated = merchantActionBodySchema.safeParse(parsed.data);
+    if (!validated.success) {
+      return validationErrorResponse(validated.error);
+    }
+
+    const { action, merchantNote } = validated.data;
 
     const existing = await prisma.returnRequest.findFirst({
       where: {
@@ -151,10 +285,61 @@ export async function PATCH(request, { params }) {
       include: requestInclude,
     });
 
+    console.log("[Email Flow] Full request loaded", {
+      requestId: id,
+      hasFullRequest: Boolean(updated),
+      customerEmail:
+        updated?.order?.customerEmail || updated?.customerEmail || null,
+      orderNumber: updated?.order?.orderNumber || "Unknown",
+      action,
+    });
+
+    let email = { sent: false };
+
+    if (shouldSendEmailNotification(existing, action)) {
+      try {
+        email = await sendReturnActionEmail({
+          returnRequest: updated,
+          action,
+          merchantNote,
+          statusLabel: config.label,
+        });
+      } catch (emailError) {
+        console.error("[PATCH /api/requests/[id]/action] email failed", {
+          message:
+            emailError instanceof Error ? emailError.message : "Unknown error",
+        });
+        email = {
+          sent: false,
+          error: "EMAIL_SEND_FAILED",
+          customerEmail:
+            updated.order?.customerEmail?.trim() ||
+            updated.customerEmail?.trim() ||
+            "",
+        };
+      }
+
+      await logEmailAuditEvent({
+        returnRequestId: id,
+        action,
+        status: config.status,
+        customerEmail: email.customerEmail ?? "",
+        emailResult: email,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       message: `Return request ${config.label.toLowerCase()} successfully.`,
       request: mapReturnRequestToDashboard(updated),
+      email: {
+        sent: email.sent === true,
+        ...(email.sent
+          ? {}
+          : email.error
+            ? { error: email.error }
+            : {}),
+      },
     });
   } catch (error) {
     console.error("[PATCH /api/requests/[id]/action]", error);

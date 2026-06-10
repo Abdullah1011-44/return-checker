@@ -157,8 +157,14 @@ export default function Dashboard() {
   const [loadError, setLoadError] = useState("");
   const [updatingId, setUpdatingId] = useState(null);
   const [actionErrors, setActionErrors] = useState({});
+  const [actionEmailFeedback, setActionEmailFeedback] = useState({});
   const [activeFilter, setActiveFilter] = useState("ALL");
   const [sortOption, setSortOption] = useState(DEFAULT_SORT);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
+  const [syncError, setSyncError] = useState("");
+  const [syncHelper, setSyncHelper] = useState("");
+  const [syncSummary, setSyncSummary] = useState(null);
 
   const pendingCount = countForFilter(requests, STATUS_FILTERS[1]);
   const attentionCount = countForFilter(requests, STATUS_FILTERS[2]);
@@ -200,6 +206,49 @@ export default function Dashboard() {
     loadRequests();
   }, [loadRequests]);
 
+  async function handleSyncShopifyOrders() {
+    if (syncing) {
+      return;
+    }
+
+    setSyncing(true);
+    setSyncMessage("");
+    setSyncError("");
+    setSyncHelper("");
+    setSyncSummary(null);
+
+    try {
+      const res = await fetch("/api/shopify/orders/sync", { method: "POST" });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        if (data.code === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED") {
+          setSyncError(
+            "Shopify connection works, but order sync needs Protected Customer Data access approval."
+          );
+          setSyncHelper(
+            "Go to Shopify Partner Dashboard > API access > Protected customer data access. Add read_orders, request approval, then reinstall the app."
+          );
+        } else {
+          setSyncError("Unable to sync Shopify orders");
+        }
+        return;
+      }
+
+      setSyncMessage("Shopify orders synced successfully");
+      setSyncSummary({
+        ordersCreated: data.orders?.created ?? 0,
+        ordersUpdated: data.orders?.updated ?? 0,
+        itemsSynced: data.items?.totalSynced ?? 0,
+      });
+      await loadRequests();
+    } catch {
+      setSyncError("Unable to sync Shopify orders");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   function handleRequestUpdated(updatedRequest) {
     setRequests((prev) =>
       prev.map((r) => (r.id === updatedRequest.id ? updatedRequest : r))
@@ -209,6 +258,7 @@ export default function Dashboard() {
   async function performAction(request, action, merchantNote) {
     setUpdatingId(request.id);
     setActionErrors((prev) => ({ ...prev, [request.id]: "" }));
+    setActionEmailFeedback((prev) => ({ ...prev, [request.id]: "" }));
 
     try {
       const body = { action };
@@ -230,6 +280,19 @@ export default function Dashboard() {
       }
 
       handleRequestUpdated(data.request);
+
+      if (data.email?.sent === true) {
+        setActionEmailFeedback((prev) => ({
+          ...prev,
+          [request.id]: "success",
+        }));
+      } else if (data.email?.sent === false && data.email?.error) {
+        setActionEmailFeedback((prev) => ({
+          ...prev,
+          [request.id]: "warning",
+        }));
+      }
+
       await loadRequests();
     } catch (error) {
       const message =
@@ -288,6 +351,14 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleSyncShopifyOrders}
+              disabled={syncing}
+              className="text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed rounded-full px-4 py-2 shadow-sm transition-all duration-150"
+            >
+              {syncing ? "Syncing..." : "Sync Shopify Orders"}
+            </button>
             <a
               href="/analytics"
               className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded-full px-4 py-2 shadow-sm transition-all duration-150"
@@ -305,6 +376,41 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
+
+        {(syncMessage || syncError || syncHelper || syncSummary) && (
+          <div className="mb-6 space-y-2">
+            {syncMessage && (
+              <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                {syncMessage}
+              </p>
+            )}
+            {syncSummary && (
+              <p className="text-xs text-slate-600 bg-white border border-slate-200 rounded-xl px-4 py-3">
+                Orders created: {syncSummary.ordersCreated}
+                {" · "}
+                Orders updated: {syncSummary.ordersUpdated}
+                {" · "}
+                Items synced: {syncSummary.itemsSynced}
+              </p>
+            )}
+            {syncError && (
+              <p
+                className={`text-sm rounded-xl px-4 py-3 border ${
+                  syncHelper
+                    ? "text-amber-800 bg-amber-50 border-amber-200"
+                    : "text-red-600 bg-red-50 border-red-200"
+                }`}
+              >
+                {syncError}
+              </p>
+            )}
+            {syncHelper && (
+              <p className="text-xs text-amber-700 bg-amber-50/80 border border-amber-200 rounded-xl px-4 py-3">
+                {syncHelper}
+              </p>
+            )}
+          </div>
+        )}
 
         {!loading && !loadError && requests.length > 0 && (
           <div className="mb-6 flex flex-wrap items-center gap-2 justify-between">
@@ -410,6 +516,7 @@ export default function Dashboard() {
                 risk={risk}
                 isUpdating={updatingId === request.id}
                 actionError={actionErrors[request.id] || ""}
+                emailFeedback={actionEmailFeedback[request.id] || ""}
                 onApprove={handleApprove(request)}
                 onReject={handleReject(request)}
                 onManualReview={handleManualReview(request)}

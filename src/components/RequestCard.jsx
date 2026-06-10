@@ -73,6 +73,7 @@ export default function RequestCard({
   risk,
   isUpdating = false,
   actionError = "",
+  emailFeedback = "",
   onApprove,
   onReject,
   onResolve,
@@ -338,6 +339,18 @@ export default function RequestCard({
         {actionError && (
           <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
             {actionError}
+          </p>
+        )}
+
+        {emailFeedback === "success" && (
+          <p className="mb-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+            Customer email notification sent.
+          </p>
+        )}
+
+        {emailFeedback === "warning" && (
+          <p className="mb-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            Action saved, but email notification could not be sent.
           </p>
         )}
 

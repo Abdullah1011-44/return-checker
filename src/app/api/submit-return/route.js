@@ -19,6 +19,11 @@ import {
   scoreForReason,
 } from "@/lib/returnScoring";
 import { serializeProofImage } from "@/lib/proofImageUrl";
+import {
+  parseJsonBody,
+  submitReturnSchema,
+  validationErrorResponse,
+} from "@/lib/validation";
 
 function serializeReturnRequest(request) {
   return {
@@ -37,22 +42,17 @@ function serializeReturnRequest(request) {
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const { orderNumber, email, returnRequestItems } = body;
-
-    if (!orderNumber || !email) {
-      return NextResponse.json(
-        { success: false, message: "Order number and email are required." },
-        { status: 400 }
-      );
+    const parsed = await parseJsonBody(request);
+    if (!parsed.ok) {
+      return parsed.response;
     }
 
-    if (!Array.isArray(returnRequestItems) || returnRequestItems.length === 0) {
-      return NextResponse.json(
-        { success: false, message: "At least one return item is required." },
-        { status: 400 }
-      );
+    const validated = submitReturnSchema.safeParse(parsed.data);
+    if (!validated.success) {
+      return validationErrorResponse(validated.error);
     }
+
+    const { orderNumber, email, returnRequestItems } = validated.data;
 
     const merchant = await resolveMerchantForCustomerFlow();
 
@@ -88,17 +88,6 @@ export async function POST(request) {
     const matchedOrderItems = [];
 
     for (const item of returnRequestItems) {
-      if (!item.returnReason || !item.selectedOption) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Each return item must include a return reason and preferred resolution.",
-          },
-          { status: 400 }
-        );
-      }
-
       const orderItem = order.items.find(
         (oi) =>
           (item.itemId && oi.id === item.itemId) ||
@@ -125,8 +114,11 @@ export async function POST(request) {
         reason: mapReturnReason(item.returnReason),
         comment: item.comment?.trim() || null,
         selectedOption: mapRecoveryOption(item.selectedOption),
-        imageUrl: serializeProofImage(item.proofImageName, item.proofImage),
-        imageMimeType: guessImageMimeType(item.proofImage),
+        imageUrl: serializeProofImage(
+          item.proofImageName,
+          item.proofImage ?? item.imageUrl
+        ),
+        imageMimeType: guessImageMimeType(item.proofImage ?? item.imageUrl),
         recoveryScore: scoreForReason(reasonKey),
         riskLevel: riskPrismaForReason(reasonKey),
         bestAction,
