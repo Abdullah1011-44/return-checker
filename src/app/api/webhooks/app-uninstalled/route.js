@@ -19,6 +19,7 @@ import {
 } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { captureException } from "@/lib/sentry";
 import {
   logWebhookInvalidHmac,
   logWebhookReceived,
@@ -93,6 +94,7 @@ export async function POST(request) {
 
       if (merchant) {
         merchantId = merchant.id;
+        webhookMeta.merchantId = merchantId;
 
         await prisma.merchant.update({
           where: { id: merchant.id },
@@ -134,6 +136,14 @@ export async function POST(request) {
       topic: "app/uninstalled",
     });
   } catch (error) {
+    captureException(error, {
+      route: request?.url,
+      method: request?.method,
+      merchantId: webhookMeta.merchantId || null,
+      shopDomain: webhookMeta.shopDomain || null,
+      action: "webhook_app_uninstalled",
+    });
+
     logWebhookError(error, webhookMeta);
 
     return handleApiError(error, {

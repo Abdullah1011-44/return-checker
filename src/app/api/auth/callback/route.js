@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createMerchantSession } from "@/lib/auth";
 import { isDevelopment, isMissingEnvError } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { captureException } from "@/lib/sentry";
 import {
   exchangeAuthorizationCode,
   getShopifyEnv,
@@ -108,6 +109,14 @@ export async function GET(request) {
     const dashboardUrl = new URL("/dashboard", appUrl);
     return NextResponse.redirect(dashboardUrl);
   } catch (error) {
+    captureException(error, {
+      route: request?.url,
+      method: request?.method,
+      merchantId: null,
+      shopDomain: request.nextUrl.searchParams.get("shop") || null,
+      action: "shopify_oauth_callback",
+    });
+
     console.error("[GET /api/auth/callback]", {
       message: error instanceof Error ? error.message : "Unknown error",
     });

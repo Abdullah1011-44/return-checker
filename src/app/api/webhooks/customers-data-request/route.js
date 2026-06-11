@@ -4,6 +4,7 @@ import {
   ADMIN_AUDIT_SEVERITY,
 } from "@/lib/adminAudit";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { captureException } from "@/lib/sentry";
 import {
   handleWebhookRouteError,
   logCustomerFromPayload,
@@ -66,6 +67,14 @@ export async function POST(request) {
       topic: "customers/data_request",
     });
   } catch (error) {
+    captureException(error, {
+      route: request?.url,
+      method: request?.method,
+      merchantId: null,
+      shopDomain: webhookMeta.shopDomain || null,
+      action: "webhook_customers_data_request",
+    });
+
     return handleWebhookRouteError(ROUTE_NAME, error, webhookMeta);
   }
 }

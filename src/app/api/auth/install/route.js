@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { isDevelopment, isMissingEnvError } from "@/lib/env";
+import { captureException } from "@/lib/sentry";
 import {
   buildAuthorizeUrl,
   generateOAuthState,
@@ -49,6 +50,14 @@ export async function GET(request) {
 
     return NextResponse.redirect(authorizeUrl);
   } catch (error) {
+    captureException(error, {
+      route: request?.url,
+      method: request?.method,
+      merchantId: null,
+      shopDomain: request.nextUrl.searchParams.get("shop") || null,
+      action: "shopify_install",
+    });
+
     console.error("[GET /api/auth/install]", {
       message: error instanceof Error ? error.message : "Unknown error",
     });

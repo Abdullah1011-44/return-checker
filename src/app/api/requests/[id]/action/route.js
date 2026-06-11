@@ -15,6 +15,7 @@ import {
 } from "@/lib/errors";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { prisma } from "@/lib/prisma";
+import { captureException } from "@/lib/sentry";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   merchantActionBodySchema,
@@ -159,6 +160,8 @@ async function logEmailAuditEvent({ returnRequestId, action, emailResult }) {
 }
 
 export async function PATCH(request, { params }) {
+  let merchant = null;
+
   try {
     const rateLimitResult = checkRateLimit(request, {
       routeName: "merchant-action",
@@ -181,7 +184,7 @@ export async function PATCH(request, { params }) {
       return createApiErrorResponse("Unauthorized", 401, "UNAUTHORIZED");
     }
 
-    const { merchant } = auth;
+    merchant = auth.merchant;
     const { id: rawId } = await params;
 
     const idResult = returnRequestIdSchema.safeParse(rawId);
@@ -311,6 +314,14 @@ export async function PATCH(request, { params }) {
             : { sent: false },
     });
   } catch (error) {
+    captureException(error, {
+      route: request?.url,
+      method: request?.method,
+      merchantId: merchant?.id || null,
+      shopDomain: merchant?.shopDomain || null,
+      action: "merchant_action",
+    });
+
     return handleApiError(error, {
       context: "merchant-action",
       fallbackMessage: "Unable to update return request. Please try again.",

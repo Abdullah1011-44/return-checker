@@ -1,4 +1,5 @@
 import { handleApiError } from "@/lib/errors";
+import { captureException } from "@/lib/sentry";
 import { buildOrderCheckResponse, findMockOrder } from "@/lib/mockOrders";
 import {
   buildOrderCheckApiResponse,
@@ -14,6 +15,8 @@ import {
 } from "@/lib/validation";
 
 export async function POST(request) {
+  let merchant = null;
+
   try {
     const rateLimitResult = checkRateLimit(request, {
       routeName: "check-return",
@@ -37,7 +40,7 @@ export async function POST(request) {
 
     const { orderNumber, email } = validated.data;
 
-    const merchant = await resolveMerchantForCustomerFlow();
+    merchant = await resolveMerchantForCustomerFlow();
 
     const order = await findCustomerOrderForReturn({
       orderNumber,
@@ -78,6 +81,14 @@ export async function POST(request) {
       message: orderNotFoundMessage(null),
     });
   } catch (error) {
+    captureException(error, {
+      route: request?.url,
+      method: request?.method,
+      merchantId: merchant?.id || null,
+      shopDomain: merchant?.shopDomain || null,
+      action: "check_return",
+    });
+
     return handleApiError(error, {
       context: "check-return",
       fallbackMessage: "Unable to check return eligibility. Please try again.",

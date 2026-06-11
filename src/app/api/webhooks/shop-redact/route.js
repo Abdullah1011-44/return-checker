@@ -5,6 +5,7 @@ import {
 } from "@/lib/adminAudit";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { captureException } from "@/lib/sentry";
 import {
   handleWebhookRouteError,
   logWebhookReceived,
@@ -85,6 +86,14 @@ export async function POST(request) {
       topic: "shop/redact",
     });
   } catch (error) {
+    captureException(error, {
+      route: request?.url,
+      method: request?.method,
+      merchantId: webhookMeta.merchantId || null,
+      shopDomain: webhookMeta.shopDomain || null,
+      action: "webhook_shop_redact",
+    });
+
     return handleWebhookRouteError(ROUTE_NAME, error, webhookMeta);
   }
 }

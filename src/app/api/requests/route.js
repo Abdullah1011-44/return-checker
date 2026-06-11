@@ -2,15 +2,18 @@ import { NextResponse } from "next/server";
 import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { prisma } from "@/lib/prisma";
+import { captureException } from "@/lib/sentry";
 
-export async function GET() {
+export async function GET(request) {
+  let merchant = null;
+
   try {
     const auth = await requireMerchantForRoute();
     if (auth.response) {
       return auth.response;
     }
 
-    const { merchant } = auth;
+    merchant = auth.merchant;
 
     const returnRequests = await prisma.returnRequest.findMany({
       where: { merchantId: merchant.id },
@@ -40,6 +43,14 @@ export async function GET() {
       requests,
     });
   } catch (error) {
+    captureException(error, {
+      route: request?.url,
+      method: request?.method,
+      merchantId: merchant?.id || null,
+      shopDomain: merchant?.shopDomain || null,
+      action: "dashboard_requests",
+    });
+
     console.error("[GET /api/requests]", error);
     return NextResponse.json(
       { success: false, message: "Failed to load return requests." },

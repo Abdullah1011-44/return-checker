@@ -5,6 +5,7 @@ import {
   safeCreateAuditEvent,
 } from "@/lib/audit";
 import { createApiErrorResponse, handleApiError } from "@/lib/errors";
+import { captureException } from "@/lib/sentry";
 import {
   findCustomerOrderForReturn,
   resolveMerchantForCustomerFlow,
@@ -47,6 +48,9 @@ function serializeReturnRequest(request) {
 }
 
 export async function POST(request) {
+  let merchant = null;
+  let merchantId = null;
+
   try {
     const rateLimitResult = checkRateLimit(request, {
       routeName: "submit-return",
@@ -86,7 +90,7 @@ export async function POST(request) {
       );
     }
 
-    const merchantId = merchant?.id ?? order.merchantId;
+    merchantId = merchant?.id ?? order.merchantId;
 
     if (merchant && order.merchantId !== merchant.id) {
       return NextResponse.json(
@@ -224,6 +228,14 @@ export async function POST(request) {
       returnRequest: serializeReturnRequest(returnRequest),
     });
   } catch (error) {
+    captureException(error, {
+      route: request?.url,
+      method: request?.method,
+      merchantId: merchant?.id || merchantId || null,
+      shopDomain: merchant?.shopDomain || null,
+      action: "submit_return",
+    });
+
     return handleApiError(error, {
       context: "submit-return",
       fallbackMessage: "Unable to submit return request. Please try again.",

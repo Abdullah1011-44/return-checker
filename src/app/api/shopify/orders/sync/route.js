@@ -21,6 +21,7 @@ import {
 } from "@/lib/errors";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { captureException } from "@/lib/sentry";
 import {
   getMerchantSyncAuditContext,
   syncShopifyOrders,
@@ -344,6 +345,14 @@ export async function POST(request) {
     if (!syncContext && merchant?.id) {
       syncContext = await getMerchantSyncAuditContext(merchant.id);
     }
+
+    captureException(error, {
+      route: request?.url,
+      method: request?.method,
+      merchantId: merchant?.id || syncContext?.merchantId || null,
+      shopDomain: merchant?.shopDomain || syncContext?.shopDomain || null,
+      action: "shopify_sync",
+    });
 
     return handleShopifySyncRouteError(error, { syncContext, request });
   }
