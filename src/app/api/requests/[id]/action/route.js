@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  AUDIT_ACTORS,
+  AUDIT_EVENTS,
+  safeCreateAuditEvent,
+} from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import { buildReturnStatusEmail } from "@/lib/emailTemplates";
 import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
@@ -21,24 +26,24 @@ const ACTION_CONFIG = {
   APPROVE: {
     status: "APPROVED",
     merchantDecision: "APPROVED",
-    eventType: "DECISION_MADE",
+    auditEvent: AUDIT_EVENTS.MERCHANT_ACTION_APPROVE,
     label: "Approved",
   },
   REJECT: {
     status: "REJECTED",
     merchantDecision: "REJECTED",
-    eventType: "DECISION_MADE",
+    auditEvent: AUDIT_EVENTS.MERCHANT_ACTION_REJECT,
     label: "Rejected",
   },
   NEEDS_MORE_INFO: {
     status: "IN_REVIEW",
     merchantDecision: "NEEDS_MORE_INFO",
-    eventType: "DECISION_MADE",
+    auditEvent: AUDIT_EVENTS.MERCHANT_ACTION_NEEDS_MORE_INFO,
     label: "Needs more information",
   },
   RESOLVE: {
     status: "RESOLVED",
-    eventType: "STATUS_CHANGED",
+    auditEvent: AUDIT_EVENTS.MERCHANT_ACTION_RESOLVE,
     label: "Resolved",
   },
 };
@@ -131,39 +136,25 @@ async function sendReturnActionEmail({
   };
 }
 
-async function logEmailAuditEvent({
-  returnRequestId,
-  action,
-  status,
-  customerEmail,
-  emailResult,
-}) {
-  try {
-    const sent = emailResult.sent === true;
+async function logEmailAuditEvent({ returnRequestId, action, emailResult }) {
+  const sent = emailResult.sent === true;
 
-    await prisma.returnEvent.create({
-      data: {
-        returnRequestId,
-        eventType: sent ? "CUSTOMER_EMAIL_SENT" : "CUSTOMER_EMAIL_FAILED",
-        actorType: "SYSTEM",
-        fromValue: null,
-        toValue: customerEmail ? "[customer]" : null,
-        note: sent
-          ? "Customer notification email sent"
-          : "Customer notification email failed",
-        metadata: {
-          action,
-          status,
-          emailSent: sent,
-          ...(sent
-            ? {}
-            : { error: emailResult.error ?? "EMAIL_SEND_FAILED" }),
-        },
-      },
-    });
-  } catch (auditError) {
-    logSafeError("merchant-action-email-audit", auditError);
-  }
+  await safeCreateAuditEvent({
+    returnRequestId,
+    eventType: sent ? AUDIT_EVENTS.EMAIL_SENT : AUDIT_EVENTS.EMAIL_FAILED,
+    actorType: AUDIT_ACTORS.SYSTEM,
+    note: sent
+      ? "Customer notification email sent"
+      : "Customer notification email failed",
+    metadata: {
+      provider: "resend",
+      action,
+      recipientType: "customer",
+      ...(sent
+        ? {}
+        : { reason: emailResult.error ?? "EMAIL_SEND_FAILED" }),
+    },
+  });
 }
 
 export async function PATCH(request, { params }) {
@@ -252,29 +243,20 @@ export async function PATCH(request, { params }) {
           ...(action === "RESOLVE" ? { resolvedAt: now } : {}),
         },
       });
+    });
 
-      const eventNote = [
-        `Merchant action: ${config.label}`,
-        merchantNote?.trim() ? `Note: ${merchantNote.trim()}` : null,
-      ]
-        .filter(Boolean)
-        .join(" — ");
-
-      await tx.returnEvent.create({
-        data: {
-          returnRequestId: id,
-          eventType: config.eventType,
-          actorType: "merchant",
-          fromValue: previousStatus,
-          toValue: config.status,
-          note: eventNote,
-          metadata: {
-            action,
-            merchantNote: merchantNote?.trim() || null,
-            itemCount: existing.items.length,
-          },
-        },
-      });
+    await safeCreateAuditEvent({
+      returnRequestId: id,
+      eventType: config.auditEvent,
+      actorType: AUDIT_ACTORS.MERCHANT,
+      fromValue: previousStatus,
+      toValue: config.status,
+      note: merchantNote?.trim() || `Merchant action: ${config.label}`,
+      metadata: {
+        action,
+        itemDecisionCount: existing.items.length,
+        hasMerchantNote: Boolean(merchantNote?.trim()),
+      },
     });
 
     const updated = await prisma.returnRequest.findFirst({
@@ -306,11 +288,6 @@ export async function PATCH(request, { params }) {
       await logEmailAuditEvent({
         returnRequestId: id,
         action,
-        status: config.status,
-        customerEmail:
-          updated.order?.customerEmail?.trim() ||
-          updated.customerEmail?.trim() ||
-          "",
         emailResult: email,
       });
     }

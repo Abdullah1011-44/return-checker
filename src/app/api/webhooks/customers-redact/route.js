@@ -3,6 +3,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   handleWebhookRouteError,
   logCustomerFromPayload,
+  logWebhookReceived,
   readVerifiedShopifyWebhook,
   resolveShopDomain,
 } from "@/lib/shopifyComplianceWebhook";
@@ -29,7 +30,9 @@ export async function POST(request) {
       return rateLimitResponse(rateLimitResult);
     }
 
-    const verified = await readVerifiedShopifyWebhook(request);
+    logWebhookReceived(ROUTE_NAME, request);
+
+    const verified = await readVerifiedShopifyWebhook(request, ROUTE_NAME);
 
     if (!verified.ok) {
       return verified.response;
@@ -40,10 +43,6 @@ export async function POST(request) {
 
     webhookMeta.topic = headers.topic ?? webhookMeta.topic;
     webhookMeta.shopDomain = shopDomain;
-
-    if (shopDomain) {
-      console.log("[shopify-compliance-webhook] shop domain:", shopDomain);
-    }
 
     logCustomerFromPayload(payload);
 

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   handleWebhookRouteError,
+  logWebhookReceived,
   readVerifiedShopifyWebhook,
   resolveShopDomain,
 } from "@/lib/shopifyComplianceWebhook";
@@ -29,7 +30,9 @@ export async function POST(request) {
       return rateLimitResponse(rateLimitResult);
     }
 
-    const verified = await readVerifiedShopifyWebhook(request);
+    logWebhookReceived(ROUTE_NAME, request);
+
+    const verified = await readVerifiedShopifyWebhook(request, ROUTE_NAME);
 
     if (!verified.ok) {
       return verified.response;
@@ -42,8 +45,6 @@ export async function POST(request) {
     webhookMeta.shopDomain = shopDomain;
 
     if (shopDomain) {
-      console.log("[shopify-compliance-webhook] shop domain:", shopDomain);
-
       const merchant = await prisma.merchant.findUnique({
         where: { shopDomain },
       });
@@ -56,16 +57,6 @@ export async function POST(request) {
             shopifyUninstalledAt: new Date(),
           },
         });
-
-        console.log(
-          "[shopify-compliance-webhook] merchant marked inactive:",
-          merchant.id
-        );
-      } else {
-        console.log(
-          "[shopify-compliance-webhook] no merchant found for shop:",
-          shopDomain
-        );
       }
     }
 

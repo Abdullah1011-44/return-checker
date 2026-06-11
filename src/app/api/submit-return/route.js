@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  AUDIT_ACTORS,
+  AUDIT_EVENTS,
+  safeCreateAuditEvent,
+} from "@/lib/audit";
 import { createApiErrorResponse, handleApiError } from "@/lib/errors";
 import {
   findCustomerOrderForReturn,
@@ -164,18 +169,6 @@ export async function POST(request) {
         items: {
           create: returnItemsCreate,
         },
-        events: {
-          create: {
-            eventType: "RETURN_SUBMITTED",
-            actorType: "customer",
-            toValue: "PENDING",
-            note: `Return submitted for order #${order.orderNumber}`,
-            metadata: {
-              itemCount: returnItemsCreate.length,
-              customerEmail: order.customerEmail,
-            },
-          },
-        },
       },
       include: {
         order: true,
@@ -185,6 +178,26 @@ export async function POST(request) {
           },
         },
         events: true,
+      },
+    });
+
+    await safeCreateAuditEvent({
+      returnRequestId: returnRequest.id,
+      eventType: AUDIT_EVENTS.RETURN_SUBMITTED,
+      actorType: AUDIT_ACTORS.CUSTOMER,
+      toValue: returnRequest.status,
+      note: "Customer submitted return request",
+      metadata: {
+        orderNumber: order.orderNumber,
+        itemCount: returnRequestItems.length,
+        selectedOptions: returnRequestItems.map((item) => item.selectedOption),
+        reasons: returnRequestItems.map((item) => item.returnReason),
+        hasImages: returnRequestItems.some(
+          (item) =>
+            Boolean(item.proofImage) ||
+            Boolean(item.imageUrl) ||
+            Boolean(item.proofImageName)
+        ),
       },
     });
 

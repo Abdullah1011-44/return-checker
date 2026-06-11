@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
 import {
+  AUDIT_ACTORS,
+  AUDIT_EVENTS,
+  logAuditInfo,
+  sanitizeAuditMetadata,
+} from "@/lib/audit";
+import {
   createApiErrorResponse,
   handleApiError,
   logSafeError,
 } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import {
+  logWebhookInvalidHmac,
+  logWebhookReceived,
+} from "@/lib/shopifyComplianceWebhook";
 import {
   getShopifyWebhookHeaders,
   verifyShopifyWebhookHmac,
@@ -43,11 +53,14 @@ export async function POST(request) {
       return rateLimitResponse(rateLimitResult);
     }
 
+    logWebhookReceived(ROUTE_NAME, request);
+
     const rawBody = await request.text();
     const headers = getShopifyWebhookHeaders(request);
     const hmacCheck = verifyShopifyWebhookHmac(rawBody, headers.hmac);
 
     if (!hmacCheck.valid) {
+      logWebhookInvalidHmac(ROUTE_NAME, headers);
       return createApiErrorResponse("Unauthorized", 401, "INVALID_WEBHOOK_HMAC");
     }
 
@@ -63,21 +76,12 @@ export async function POST(request) {
     webhookMeta.topic = headers.topic ?? webhookMeta.topic;
     webhookMeta.shopDomain = shopDomain;
 
-    console.log("[shopify-app-uninstalled]", {
-      topic: webhookMeta.topic,
-      shopDomain: webhookMeta.shopDomain,
-      webhookId: headers.webhookId,
-    });
-
-    let merchantFound = false;
     let merchantMarkedInactive = false;
 
     if (shopDomain) {
       const merchant = await prisma.merchant.findUnique({
         where: { shopDomain },
       });
-
-      merchantFound = Boolean(merchant);
 
       if (merchant) {
         await prisma.merchant.update({
@@ -92,10 +96,14 @@ export async function POST(request) {
       }
     }
 
-    console.log("[shopify-app-uninstalled]", {
-      merchantFound,
-      merchantMarkedInactive,
-    });
+    logAuditInfo(
+      AUDIT_EVENTS.APP_UNINSTALLED,
+      sanitizeAuditMetadata({
+        actorType: AUDIT_ACTORS.WEBHOOK,
+        shopDomain,
+        merchantUpdated: merchantMarkedInactive,
+      })
+    );
 
     return NextResponse.json({
       success: true,

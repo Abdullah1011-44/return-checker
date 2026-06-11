@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import {
+  AUDIT_ACTORS,
+  AUDIT_EVENTS,
+  logAuditInfo,
+  sanitizeAuditMetadata,
+} from "@/lib/audit";
+import {
   AppError,
   createApiErrorResponse,
   handleApiError,
@@ -7,7 +13,10 @@ import {
 } from "@/lib/errors";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
-import { syncShopifyOrders } from "@/lib/syncShopifyOrders";
+import {
+  getMerchantSyncAuditContext,
+  syncShopifyOrders,
+} from "@/lib/syncShopifyOrders";
 
 function isProtectedCustomerDataError(error) {
   return (
@@ -38,23 +47,89 @@ function isShopifyNetworkError(error) {
   return error instanceof TypeError && /fetch failed/i.test(error.message);
 }
 
-function logShopifySyncError(context, error, meta = {}) {
+function logShopifySyncError(context, error, syncContext, meta = {}) {
   console.error("[Shopify Sync]", {
     context,
-    shopDomain: meta.shopDomain ?? null,
+    merchantId: syncContext?.merchantId ?? null,
+    shopDomain: syncContext?.shopDomain ?? null,
     endpoint: error?.endpoint ?? meta.endpoint ?? null,
     httpStatus: error?.status ?? null,
     code: error?.code ?? null,
-    hasToken: meta.hasToken ?? null,
+    hasToken: syncContext?.hasToken ?? false,
   });
 
   logSafeError(context, error);
 }
 
+function buildSyncAuditMeta(syncContext, extra = {}) {
+  return sanitizeAuditMetadata({
+    merchantId: syncContext?.merchantId ?? null,
+    shopDomain: syncContext?.shopDomain ?? null,
+    hasToken: syncContext?.hasToken ?? false,
+    ...extra,
+  });
+}
+
+function resolveSyncFailureAudit(error) {
+  if (isProtectedCustomerDataError(error)) {
+    return {
+      code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
+      httpStatus: 403,
+    };
+  }
+
+  if (error instanceof AppError) {
+    return { code: error.code, httpStatus: error.status };
+  }
+
+  const httpStatus = error?.status;
+
+  if (httpStatus === 401 || httpStatus === 403) {
+    return { code: "SHOPIFY_PERMISSION_REQUIRED", httpStatus };
+  }
+
+  if (httpStatus === 429) {
+    return { code: "SHOPIFY_RATE_LIMIT", httpStatus: 429 };
+  }
+
+  if (httpStatus === 500 || httpStatus === 502 || httpStatus === 503) {
+    return { code: "SHOPIFY_UNAVAILABLE", httpStatus: 502 };
+  }
+
+  if (isShopifyNetworkError(error)) {
+    return { code: "SHOPIFY_CONNECTION_ERROR", httpStatus: 503 };
+  }
+
+  return {
+    code: error?.code ?? "SHOPIFY_SYNC_ERROR",
+    httpStatus: httpStatus ?? 500,
+  };
+}
+
 function handleShopifySyncRouteError(error, meta = {}) {
-  logShopifySyncError("shopify-order-sync", error, meta);
+  const { syncContext } = meta;
 
   if (isProtectedCustomerDataError(error)) {
+    console.error("[Shopify Sync]", {
+      context: "shopify-order-sync",
+      merchantId: syncContext?.merchantId ?? null,
+      shopDomain: syncContext?.shopDomain ?? null,
+      endpoint: error?.endpoint ?? null,
+      httpStatus: 403,
+      code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
+      hasToken: syncContext?.hasToken ?? false,
+    });
+
+    logAuditInfo(
+      AUDIT_EVENTS.SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED,
+      buildSyncAuditMeta(syncContext, {
+        actorType: AUDIT_ACTORS.SHOPIFY,
+        endpoint: error?.endpoint ?? null,
+        httpStatus: 403,
+        code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
+      })
+    );
+
     return createApiErrorResponse(
       "Shopify connection works, but order sync requires protected customer data access approval in Shopify Partner Dashboard.",
       403,
@@ -66,11 +141,22 @@ function handleShopifySyncRouteError(error, meta = {}) {
     );
   }
 
+  const { code, httpStatus } = resolveSyncFailureAudit(error);
+
+  logShopifySyncError("shopify-order-sync", error, syncContext, meta);
+
+  logAuditInfo(
+    AUDIT_EVENTS.SHOPIFY_SYNC_FAILED,
+    buildSyncAuditMeta(syncContext, {
+      actorType: AUDIT_ACTORS.SYSTEM,
+      code,
+      httpStatus,
+    })
+  );
+
   if (error instanceof AppError) {
     return createApiErrorResponse(error.message, error.status, error.code);
   }
-
-  const httpStatus = error?.status;
 
   if (httpStatus === 401 || httpStatus === 403) {
     return createApiErrorResponse(
@@ -88,7 +174,7 @@ function handleShopifySyncRouteError(error, meta = {}) {
     );
   }
 
-  if (httpStatus === 500 || httpStatus === 502 || httpStatus === 503) {
+  if (code === "SHOPIFY_UNAVAILABLE") {
     return createApiErrorResponse(
       "Shopify is temporarily unavailable. Please try again later.",
       502,
@@ -96,7 +182,7 @@ function handleShopifySyncRouteError(error, meta = {}) {
     );
   }
 
-  if (isShopifyNetworkError(error)) {
+  if (code === "SHOPIFY_CONNECTION_ERROR") {
     return createApiErrorResponse(
       "Unable to connect to Shopify. Please try again.",
       503,
@@ -117,6 +203,7 @@ function handleShopifySyncRouteError(error, meta = {}) {
  */
 export async function POST(request) {
   let merchant = null;
+  let syncContext = null;
 
   try {
     const rateLimitResult = checkRateLimit(request, {
@@ -135,11 +222,26 @@ export async function POST(request) {
     }
 
     merchant = auth.merchant;
+    syncContext = await getMerchantSyncAuditContext(merchant.id);
+
+    logAuditInfo(
+      AUDIT_EVENTS.SHOPIFY_SYNC_STARTED,
+      buildSyncAuditMeta(syncContext, {
+        actorType: AUDIT_ACTORS.SYSTEM,
+      })
+    );
+
     const result = await syncShopifyOrders(merchant.id);
 
-    // TODO: Add merchant-level audit event support for Shopify sync.
-    // ReturnEvent requires returnRequestId, so SHOPIFY_ORDER_SYNC cannot be
-    // persisted until merchant-scoped audit events exist.
+    logAuditInfo(
+      AUDIT_EVENTS.SHOPIFY_SYNC_COMPLETED,
+      buildSyncAuditMeta(syncContext, {
+        actorType: AUDIT_ACTORS.SYSTEM,
+        createdOrders: result.orders?.created ?? 0,
+        updatedOrders: result.orders?.updated ?? 0,
+        syncedItems: result.items?.totalSynced ?? 0,
+      })
+    );
 
     return NextResponse.json({
       success: true,
@@ -148,9 +250,10 @@ export async function POST(request) {
       pagesFetched: result.pagesFetched,
     });
   } catch (error) {
-    return handleShopifySyncRouteError(error, {
-      shopDomain: merchant?.shopDomain,
-      hasToken: Boolean(merchant?.shopifyAccessToken),
-    });
+    if (!syncContext && merchant?.id) {
+      syncContext = await getMerchantSyncAuditContext(merchant.id);
+    }
+
+    return handleShopifySyncRouteError(error, { syncContext });
   }
 }
