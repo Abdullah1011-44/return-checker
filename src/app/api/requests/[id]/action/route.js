@@ -7,6 +7,7 @@ import {
 import { sendEmail } from "@/lib/email";
 import { buildReturnStatusEmail } from "@/lib/emailTemplates";
 import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
+import { logUnauthorizedApiAccess } from "@/lib/adminAudit";
 import {
   createApiErrorResponse,
   handleApiError,
@@ -171,6 +172,12 @@ export async function PATCH(request, { params }) {
 
     const auth = await requireMerchantForRoute();
     if (auth.response) {
+      await logUnauthorizedApiAccess(request, {
+        routeName: "merchant-action",
+        resourceId: "/api/requests/[id]/action",
+        method: "PATCH",
+      });
+
       return createApiErrorResponse("Unauthorized", 401, "UNAUTHORIZED");
     }
 

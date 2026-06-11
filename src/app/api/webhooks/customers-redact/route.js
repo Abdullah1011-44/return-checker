@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
+import {
+  ADMIN_AUDIT_EVENTS,
+  ADMIN_AUDIT_SEVERITY,
+} from "@/lib/adminAudit";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   handleWebhookRouteError,
   logCustomerFromPayload,
   logWebhookReceived,
+  persistComplianceWebhookSuccess,
   readVerifiedShopifyWebhook,
   resolveShopDomain,
 } from "@/lib/shopifyComplianceWebhook";
@@ -30,7 +35,7 @@ export async function POST(request) {
       return rateLimitResponse(rateLimitResult);
     }
 
-    logWebhookReceived(ROUTE_NAME, request);
+    await logWebhookReceived(ROUTE_NAME, request);
 
     const verified = await readVerifiedShopifyWebhook(request, ROUTE_NAME);
 
@@ -45,6 +50,16 @@ export async function POST(request) {
     webhookMeta.shopDomain = shopDomain;
 
     logCustomerFromPayload(payload);
+
+    await persistComplianceWebhookSuccess({
+      request,
+      routeName: ROUTE_NAME,
+      headers,
+      shopDomain,
+      eventType: ADMIN_AUDIT_EVENTS.CUSTOMERS_REDACT,
+      severity: ADMIN_AUDIT_SEVERITY.WARN,
+      message: "Shopify customers redact request received",
+    });
 
     return NextResponse.json({
       success: true,

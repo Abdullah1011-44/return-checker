@@ -1,4 +1,12 @@
 import {
+  ADMIN_AUDIT_ACTORS,
+  ADMIN_AUDIT_EVENTS,
+  ADMIN_AUDIT_SEVERITY,
+  getAuditRequestContext,
+  safeCreateAdminAuditLog,
+  sanitizeAdminAuditMetadata,
+} from "@/lib/adminAudit";
+import {
   AUDIT_ACTORS,
   AUDIT_EVENTS,
   logAuditInfo,
@@ -30,20 +38,82 @@ export function buildWebhookAuditMeta(routeName, headers, extra = {}) {
 }
 
 /** Safe audit log when a webhook request is received (before body read). */
-export function logWebhookReceived(routeName, request) {
+export async function logWebhookReceived(routeName, request) {
   const headers = getShopifyWebhookHeaders(request);
+  const requestContext = getAuditRequestContext(request);
+
   logAuditInfo(
     AUDIT_EVENTS.WEBHOOK_RECEIVED,
     buildWebhookAuditMeta(routeName, headers)
   );
+
+  await safeCreateAdminAuditLog({
+    eventType: ADMIN_AUDIT_EVENTS.WEBHOOK_RECEIVED,
+    actorType: ADMIN_AUDIT_ACTORS.WEBHOOK,
+    severity: ADMIN_AUDIT_SEVERITY.INFO,
+    resourceType: "SHOPIFY_WEBHOOK",
+    message: "Shopify webhook received",
+    metadata: sanitizeAdminAuditMetadata({
+      routeName,
+      shopDomain: headers.shopDomain ?? null,
+      topic: headers.topic ?? null,
+    }),
+    ...requestContext,
+  });
 }
 
 /** Safe audit log when HMAC verification fails. */
-export function logWebhookInvalidHmac(routeName, headers) {
+export async function logWebhookInvalidHmac(routeName, headers, request) {
+  const requestContext = getAuditRequestContext(request);
+
   logAuditInfo(
     AUDIT_EVENTS.WEBHOOK_INVALID_HMAC,
     buildWebhookAuditMeta(routeName, headers, { reason: "Invalid HMAC" })
   );
+
+  await safeCreateAdminAuditLog({
+    eventType: ADMIN_AUDIT_EVENTS.WEBHOOK_INVALID_HMAC,
+    actorType: ADMIN_AUDIT_ACTORS.WEBHOOK,
+    severity: ADMIN_AUDIT_SEVERITY.SECURITY,
+    resourceType: "SHOPIFY_WEBHOOK",
+    message: "Invalid Shopify webhook HMAC",
+    metadata: sanitizeAdminAuditMetadata({
+      routeName,
+      shopDomain: headers.shopDomain ?? null,
+      topic: headers.topic ?? null,
+      reason: "Invalid HMAC",
+    }),
+    ...requestContext,
+  });
+}
+
+/** Persist a successful compliance webhook audit event. */
+export async function persistComplianceWebhookSuccess({
+  request,
+  routeName,
+  headers,
+  shopDomain,
+  eventType,
+  severity,
+  message,
+  merchantId = null,
+  metadata = {},
+}) {
+  await safeCreateAdminAuditLog({
+    ...(merchantId ? { merchantId } : {}),
+    eventType,
+    actorType: ADMIN_AUDIT_ACTORS.WEBHOOK,
+    severity,
+    resourceType: "SHOPIFY_WEBHOOK",
+    message,
+    metadata: sanitizeAdminAuditMetadata({
+      routeName,
+      shopDomain: shopDomain ?? headers?.shopDomain ?? null,
+      topic: headers?.topic ?? null,
+      ...metadata,
+    }),
+    ...getAuditRequestContext(request),
+  });
 }
 
 /** Read raw body, verify HMAC, then parse JSON. Never parse before verification. */
@@ -53,7 +123,7 @@ export async function readVerifiedShopifyWebhook(request, routeName) {
   const hmacCheck = verifyShopifyWebhookHmac(rawBody, headers.hmac);
 
   if (!hmacCheck.valid) {
-    logWebhookInvalidHmac(routeName, headers);
+    await logWebhookInvalidHmac(routeName, headers, request);
 
     return {
       ok: false,

@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import {
+  ADMIN_AUDIT_ACTORS,
+  ADMIN_AUDIT_EVENTS,
+  ADMIN_AUDIT_SEVERITY,
+  getAuditRequestContext,
+  safeCreateAdminAuditLog,
+  sanitizeAdminAuditMetadata,
+} from "@/lib/adminAudit";
+import {
   AUDIT_ACTORS,
   AUDIT_EVENTS,
   logAuditInfo,
-  sanitizeAuditMetadata,
 } from "@/lib/audit";
 import {
   createApiErrorResponse,
@@ -53,14 +60,14 @@ export async function POST(request) {
       return rateLimitResponse(rateLimitResult);
     }
 
-    logWebhookReceived(ROUTE_NAME, request);
+    await logWebhookReceived(ROUTE_NAME, request);
 
     const rawBody = await request.text();
     const headers = getShopifyWebhookHeaders(request);
     const hmacCheck = verifyShopifyWebhookHmac(rawBody, headers.hmac);
 
     if (!hmacCheck.valid) {
-      logWebhookInvalidHmac(ROUTE_NAME, headers);
+      await logWebhookInvalidHmac(ROUTE_NAME, headers, request);
       return createApiErrorResponse("Unauthorized", 401, "INVALID_WEBHOOK_HMAC");
     }
 
@@ -77,6 +84,7 @@ export async function POST(request) {
     webhookMeta.shopDomain = shopDomain;
 
     let merchantMarkedInactive = false;
+    let merchantId = null;
 
     if (shopDomain) {
       const merchant = await prisma.merchant.findUnique({
@@ -84,6 +92,8 @@ export async function POST(request) {
       });
 
       if (merchant) {
+        merchantId = merchant.id;
+
         await prisma.merchant.update({
           where: { id: merchant.id },
           data: {
@@ -98,12 +108,26 @@ export async function POST(request) {
 
     logAuditInfo(
       AUDIT_EVENTS.APP_UNINSTALLED,
-      sanitizeAuditMetadata({
+      sanitizeAdminAuditMetadata({
         actorType: AUDIT_ACTORS.WEBHOOK,
         shopDomain,
         merchantUpdated: merchantMarkedInactive,
       })
     );
+
+    await safeCreateAdminAuditLog({
+      ...(merchantId ? { merchantId } : {}),
+      eventType: ADMIN_AUDIT_EVENTS.APP_UNINSTALLED,
+      actorType: ADMIN_AUDIT_ACTORS.WEBHOOK,
+      severity: ADMIN_AUDIT_SEVERITY.WARN,
+      resourceType: "SHOPIFY_APP",
+      message: "Shopify app uninstalled",
+      metadata: sanitizeAdminAuditMetadata({
+        shopDomain,
+        merchantUpdated: merchantMarkedInactive,
+      }),
+      ...getAuditRequestContext(request),
+    });
 
     return NextResponse.json({
       success: true,

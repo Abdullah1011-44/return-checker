@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
+import {
+  ADMIN_AUDIT_EVENTS,
+  ADMIN_AUDIT_SEVERITY,
+} from "@/lib/adminAudit";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   handleWebhookRouteError,
   logWebhookReceived,
+  persistComplianceWebhookSuccess,
   readVerifiedShopifyWebhook,
   resolveShopDomain,
 } from "@/lib/shopifyComplianceWebhook";
@@ -30,7 +35,7 @@ export async function POST(request) {
       return rateLimitResponse(rateLimitResult);
     }
 
-    logWebhookReceived(ROUTE_NAME, request);
+    await logWebhookReceived(ROUTE_NAME, request);
 
     const verified = await readVerifiedShopifyWebhook(request, ROUTE_NAME);
 
@@ -44,12 +49,16 @@ export async function POST(request) {
     webhookMeta.topic = headers.topic ?? webhookMeta.topic;
     webhookMeta.shopDomain = shopDomain;
 
+    let merchantId = null;
+
     if (shopDomain) {
       const merchant = await prisma.merchant.findUnique({
         where: { shopDomain },
       });
 
       if (merchant) {
+        merchantId = merchant.id;
+
         await prisma.merchant.update({
           where: { id: merchant.id },
           data: {
@@ -59,6 +68,17 @@ export async function POST(request) {
         });
       }
     }
+
+    await persistComplianceWebhookSuccess({
+      request,
+      routeName: ROUTE_NAME,
+      headers,
+      shopDomain,
+      eventType: ADMIN_AUDIT_EVENTS.SHOP_REDACT,
+      severity: ADMIN_AUDIT_SEVERITY.WARN,
+      message: "Shopify shop redact request received",
+      merchantId,
+    });
 
     return NextResponse.json({
       success: true,

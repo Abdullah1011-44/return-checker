@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
 import {
+  ADMIN_AUDIT_ACTORS,
+  ADMIN_AUDIT_EVENTS,
+  ADMIN_AUDIT_SEVERITY,
+  getAuditRequestContext,
+  logUnauthorizedApiAccess,
+  safeCreateAdminAuditLog,
+} from "@/lib/adminAudit";
+import {
   AUDIT_ACTORS,
   AUDIT_EVENTS,
   logAuditInfo,
@@ -106,8 +114,11 @@ function resolveSyncFailureAudit(error) {
   };
 }
 
-function handleShopifySyncRouteError(error, meta = {}) {
-  const { syncContext } = meta;
+async function handleShopifySyncRouteError(error, meta = {}) {
+  const { syncContext, request } = meta;
+  const requestContext = request
+    ? getAuditRequestContext(request)
+    : { ipAddress: null, userAgent: null };
 
   if (isProtectedCustomerDataError(error)) {
     console.error("[Shopify Sync]", {
@@ -129,6 +140,23 @@ function handleShopifySyncRouteError(error, meta = {}) {
         code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
       })
     );
+
+    await safeCreateAdminAuditLog({
+      merchantId: syncContext?.merchantId ?? null,
+      eventType: ADMIN_AUDIT_EVENTS.SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED,
+      actorType: ADMIN_AUDIT_ACTORS.SHOPIFY,
+      severity: ADMIN_AUDIT_SEVERITY.WARN,
+      resourceType: "SHOPIFY_SYNC",
+      message: "Shopify protected customer data access required",
+      metadata: {
+        shopDomain: syncContext?.shopDomain ?? null,
+        endpoint: error?.endpoint ?? null,
+        httpStatus: 403,
+        code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
+        hasToken: syncContext?.hasToken ?? false,
+      },
+      ...requestContext,
+    });
 
     return createApiErrorResponse(
       "Shopify connection works, but order sync requires protected customer data access approval in Shopify Partner Dashboard.",
@@ -153,6 +181,21 @@ function handleShopifySyncRouteError(error, meta = {}) {
       httpStatus,
     })
   );
+
+  await safeCreateAdminAuditLog({
+    merchantId: syncContext?.merchantId ?? null,
+    eventType: ADMIN_AUDIT_EVENTS.SHOPIFY_SYNC_FAILED,
+    actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
+    severity: ADMIN_AUDIT_SEVERITY.ERROR,
+    resourceType: "SHOPIFY_SYNC",
+    message: "Shopify order sync failed",
+    metadata: {
+      shopDomain: syncContext?.shopDomain ?? null,
+      code,
+      httpStatus,
+    },
+    ...requestContext,
+  });
 
   if (error instanceof AppError) {
     return createApiErrorResponse(error.message, error.status, error.code);
@@ -213,16 +256,34 @@ export async function POST(request) {
     });
 
     if (!rateLimitResult.allowed) {
+      await safeCreateAdminAuditLog({
+        eventType: ADMIN_AUDIT_EVENTS.RATE_LIMIT_TRIGGERED,
+        actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
+        severity: ADMIN_AUDIT_SEVERITY.WARN,
+        resourceType: "SHOPIFY_SYNC",
+        message: "Shopify sync rate limit triggered",
+        metadata: { routeName: "shopify-order-sync" },
+        ...getAuditRequestContext(request),
+      });
+
       return rateLimitResponse(rateLimitResult);
     }
 
     const auth = await requireMerchantForRoute();
     if (auth.response) {
+      await logUnauthorizedApiAccess(request, {
+        routeName: "shopify-order-sync",
+        resourceId: "/api/shopify/orders/sync",
+        method: "POST",
+      });
+
       return createApiErrorResponse("Unauthorized", 401, "UNAUTHORIZED");
     }
 
     merchant = auth.merchant;
     syncContext = await getMerchantSyncAuditContext(merchant.id);
+
+    const requestContext = getAuditRequestContext(request);
 
     logAuditInfo(
       AUDIT_EVENTS.SHOPIFY_SYNC_STARTED,
@@ -230,6 +291,20 @@ export async function POST(request) {
         actorType: AUDIT_ACTORS.SYSTEM,
       })
     );
+
+    await safeCreateAdminAuditLog({
+      merchantId: syncContext.merchantId,
+      eventType: ADMIN_AUDIT_EVENTS.SHOPIFY_SYNC_STARTED,
+      actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
+      severity: ADMIN_AUDIT_SEVERITY.INFO,
+      resourceType: "SHOPIFY_SYNC",
+      message: "Shopify order sync started",
+      metadata: {
+        shopDomain: syncContext.shopDomain,
+        hasToken: syncContext.hasToken,
+      },
+      ...requestContext,
+    });
 
     const result = await syncShopifyOrders(merchant.id);
 
@@ -243,6 +318,22 @@ export async function POST(request) {
       })
     );
 
+    await safeCreateAdminAuditLog({
+      merchantId: syncContext.merchantId,
+      eventType: ADMIN_AUDIT_EVENTS.SHOPIFY_SYNC_COMPLETED,
+      actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
+      severity: ADMIN_AUDIT_SEVERITY.INFO,
+      resourceType: "SHOPIFY_SYNC",
+      message: "Shopify order sync completed",
+      metadata: {
+        shopDomain: syncContext.shopDomain,
+        createdOrders: result.orders?.created ?? 0,
+        updatedOrders: result.orders?.updated ?? 0,
+        syncedItems: result.items?.totalSynced ?? 0,
+      },
+      ...requestContext,
+    });
+
     return NextResponse.json({
       success: true,
       orders: result.orders,
@@ -254,6 +345,6 @@ export async function POST(request) {
       syncContext = await getMerchantSyncAuditContext(merchant.id);
     }
 
-    return handleShopifySyncRouteError(error, { syncContext });
+    return handleShopifySyncRouteError(error, { syncContext, request });
   }
 }

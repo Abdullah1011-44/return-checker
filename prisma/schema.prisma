@@ -37,6 +37,7 @@ model Merchant {
   orders               CustomerOrder[]
   users                MerchantUser[]
   returnRequests       ReturnRequest[]
+  adminAuditLogs       AdminAuditLog[]
 
   @@index([shopDomain])
   @@index([planTier])
@@ -185,6 +186,30 @@ model ReturnEvent {
   @@index([actorUserId])
   @@index([eventType])
   @@index([createdAt])
+}
+
+model AdminAuditLog {
+  id           String    @id @default(cuid())
+  merchantId   String?
+  actorType    String
+  actorUserId  String?
+  eventType    String
+  severity     String    @default("INFO")
+  resourceType String?
+  resourceId   String?
+  message      String?
+  metadata     Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+  merchant     Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  @@index([merchantId])
+  @@index([eventType])
+  @@index([actorType])
+  @@index([severity])
+  @@index([createdAt])
+  @@index([resourceType, resourceId])
 }
 
 enum OrderStatus {
