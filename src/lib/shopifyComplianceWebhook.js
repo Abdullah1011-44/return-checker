@@ -1,4 +1,10 @@
 import {
+  AUDIT_ACTORS,
+  AUDIT_EVENTS,
+  logAuditInfo,
+  sanitizeAuditMetadata,
+} from "@/lib/audit";
+import {
   createApiErrorResponse,
   handleApiError,
   logSafeError,
@@ -13,13 +19,42 @@ import {
  * See: customers/data_request, customers/redact, shop/redact.
  */
 
+export function buildWebhookAuditMeta(routeName, headers, extra = {}) {
+  return sanitizeAuditMetadata({
+    actorType: AUDIT_ACTORS.WEBHOOK,
+    routeName,
+    shopDomain: headers?.shopDomain ?? null,
+    topic: headers?.topic ?? null,
+    ...extra,
+  });
+}
+
+/** Safe audit log when a webhook request is received (before body read). */
+export function logWebhookReceived(routeName, request) {
+  const headers = getShopifyWebhookHeaders(request);
+  logAuditInfo(
+    AUDIT_EVENTS.WEBHOOK_RECEIVED,
+    buildWebhookAuditMeta(routeName, headers)
+  );
+}
+
+/** Safe audit log when HMAC verification fails. */
+export function logWebhookInvalidHmac(routeName, headers) {
+  logAuditInfo(
+    AUDIT_EVENTS.WEBHOOK_INVALID_HMAC,
+    buildWebhookAuditMeta(routeName, headers, { reason: "Invalid HMAC" })
+  );
+}
+
 /** Read raw body, verify HMAC, then parse JSON. Never parse before verification. */
-export async function readVerifiedShopifyWebhook(request) {
+export async function readVerifiedShopifyWebhook(request, routeName) {
   const rawBody = await request.text();
   const headers = getShopifyWebhookHeaders(request);
   const hmacCheck = verifyShopifyWebhookHmac(rawBody, headers.hmac);
 
   if (!hmacCheck.valid) {
+    logWebhookInvalidHmac(routeName, headers);
+
     return {
       ok: false,
       response: invalidWebhookHmacResponse(),
@@ -27,18 +62,8 @@ export async function readVerifiedShopifyWebhook(request) {
   }
 
   const payload = JSON.parse(rawBody);
-  logComplianceWebhook(headers);
 
   return { ok: true, headers, payload };
-}
-
-/** Development logging for incoming compliance webhooks. */
-export function logComplianceWebhook(headers) {
-  console.log("[shopify-compliance-webhook]", {
-    topic: headers.topic,
-    shopDomain: headers.shopDomain,
-    webhookId: headers.webhookId,
-  });
 }
 
 export function invalidWebhookHmacResponse() {

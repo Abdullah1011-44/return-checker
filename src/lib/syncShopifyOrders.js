@@ -160,6 +160,35 @@ function buildOrderItemData(lineItem) {
 }
 
 /**
+ * Load safe audit context for Shopify sync (same DB row the API uses for tokens).
+ * Never returns the actual access token — only hasToken boolean.
+ */
+export async function getMerchantSyncAuditContext(merchantId) {
+  const merchant = await prisma.merchant.findUnique({
+    where: { id: merchantId },
+    select: {
+      id: true,
+      shopDomain: true,
+      shopifyAccessToken: true,
+    },
+  });
+
+  if (!merchant) {
+    return {
+      merchantId,
+      shopDomain: null,
+      hasToken: false,
+    };
+  }
+
+  return {
+    merchantId: merchant.id,
+    shopDomain: merchant.shopDomain,
+    hasToken: Boolean(merchant.shopifyAccessToken),
+  };
+}
+
+/**
  * Sync Shopify orders for a merchant into CustomerOrder / OrderItem.
  * Safe to run multiple times — upserts by shopifyOrderId / shopifyLineItemId.
  *
