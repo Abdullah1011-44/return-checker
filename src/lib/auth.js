@@ -12,6 +12,7 @@ const MERCHANT_SELECT = {
   shopDomain: true,
   shopName: true,
   email: true,
+  role: true,
   isActive: true,
   shopifyInstalledAt: true,
 };

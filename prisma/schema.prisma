@@ -12,6 +12,7 @@ model Merchant {
   id                   String          @id @default(cuid())
   shopName             String
   email                String          @unique
+  role                 UserRole        @default(MERCHANT)
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
   allowExchange        Boolean         @default(true)
@@ -265,6 +266,11 @@ enum RiskLevel {
   LOW
   MEDIUM
   HIGH
+}
+
+enum UserRole {
+  MERCHANT
+  ADMIN
 }
 
 enum MerchantUserRole {
