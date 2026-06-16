@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "biome check",
     "test": "vitest run",
+    "test:watch": "vitest",
     "format": "biome format --write",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
