@@ -5,6 +5,12 @@ import {
   safeCreateAuditEvent,
 } from "@/lib/audit";
 import { createApiErrorResponse, handleApiError } from "@/lib/errors";
+import {
+  DuplicateReturnRequestError,
+  findDuplicateReturnItems,
+  formatDuplicateItemsForResponse,
+  hasDuplicateOrderItemIds,
+} from "@/lib/duplicateReturnPrevention";
 import { captureException } from "@/lib/sentry";
 import {
   findCustomerOrderForReturn,
@@ -74,12 +80,12 @@ export async function POST(request) {
 
     const { orderNumber, email, returnRequestItems } = validated.data;
 
-    const merchant = await resolveMerchantForCustomerFlow();
+    const sessionMerchant = await resolveMerchantForCustomerFlow();
 
     const order = await findCustomerOrderForReturn({
       orderNumber,
       email,
-      merchant,
+      merchant: sessionMerchant,
     });
 
     if (!order) {
@@ -90,9 +96,10 @@ export async function POST(request) {
       );
     }
 
-    merchantId = merchant?.id ?? order.merchantId;
+    merchantId = sessionMerchant?.id ?? order.merchantId;
+    merchant = sessionMerchant;
 
-    if (merchant && order.merchantId !== merchant.id) {
+    if (sessionMerchant && order.merchantId !== sessionMerchant.id) {
       return NextResponse.json(
         {
           success: false,
@@ -104,6 +111,7 @@ export async function POST(request) {
 
     const returnItemsCreate = [];
     const matchedOrderItems = [];
+    const resolvedOrderItemIds = [];
 
     for (const item of returnRequestItems) {
       const orderItem = order.items.find(
@@ -122,6 +130,7 @@ export async function POST(request) {
         );
       }
 
+      resolvedOrderItemIds.push(orderItem.id);
       matchedOrderItems.push(orderItem);
       const reasonKey = reasonKeyFromUiOrPrisma(item.returnReason);
       const bestAction = bestActionForReason(reasonKey);
@@ -150,6 +159,18 @@ export async function POST(request) {
       });
     }
 
+    if (hasDuplicateOrderItemIds(resolvedOrderItemIds)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "DUPLICATE_ITEM_IDS_IN_REQUEST",
+          message:
+            "The same item cannot be submitted more than once in a single request.",
+        },
+        { status: 400 }
+      );
+    }
+
     const eligibility = resolveRequestEligibility(matchedOrderItems);
 
     let windowExpiresAt = null;
@@ -160,29 +181,43 @@ export async function POST(request) {
       );
     }
 
-    const returnRequest = await prisma.returnRequest.create({
-      data: {
+    const returnRequest = await prisma.$transaction(async (tx) => {
+      const duplicateItems = await findDuplicateReturnItems({
+        prisma: tx,
         merchantId,
-        orderId: order.id,
-        customerEmail: order.customerEmail,
-        customerName: order.customerName,
-        eligibilityStatus: eligibility.status,
-        eligibilityReason: eligibility.reason,
-        windowExpiresAt,
-        status: "PENDING",
-        items: {
-          create: returnItemsCreate,
-        },
-      },
-      include: {
-        order: true,
-        items: {
-          include: {
-            orderItem: true,
+        orderItemIds: resolvedOrderItemIds,
+      });
+
+      if (duplicateItems.length > 0) {
+        throw new DuplicateReturnRequestError(
+          formatDuplicateItemsForResponse(duplicateItems)
+        );
+      }
+
+      return tx.returnRequest.create({
+        data: {
+          merchantId,
+          orderId: order.id,
+          customerEmail: order.customerEmail,
+          customerName: order.customerName,
+          eligibilityStatus: eligibility.status,
+          eligibilityReason: eligibility.reason,
+          windowExpiresAt,
+          status: "PENDING",
+          items: {
+            create: returnItemsCreate,
           },
         },
-        events: true,
-      },
+        include: {
+          order: true,
+          items: {
+            include: {
+              orderItem: true,
+            },
+          },
+          events: true,
+        },
+      });
     });
 
     await safeCreateAuditEvent({
@@ -228,6 +263,17 @@ export async function POST(request) {
       returnRequest: serializeReturnRequest(returnRequest),
     });
   } catch (error) {
+    if (error instanceof DuplicateReturnRequestError) {
+      return NextResponse.json(
+        {
+          error: "DUPLICATE_RETURN_REQUEST",
+          message: error.message,
+          duplicateItems: error.duplicateItems,
+        },
+        { status: 409 }
+      );
+    }
+
     captureException(error, {
       route: request?.url,
       method: request?.method,

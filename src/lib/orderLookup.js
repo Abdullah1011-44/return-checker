@@ -1,5 +1,10 @@
 import { getCurrentMerchant } from "@/lib/auth";
 import {
+  applyDuplicateFlagsToCheckItem,
+  duplicateItemsToMap,
+  findDuplicateReturnItems,
+} from "@/lib/duplicateReturnPrevention";
+import {
   normalizeEmail,
   normalizeOrderNumber,
 } from "@/lib/returnApiMappers";
@@ -72,9 +77,20 @@ function mapOrderItemToCheckItem(orderItem, order, merchant) {
 }
 
 /** Map Prisma CustomerOrder → /api/check-return response shape. */
-export function buildOrderCheckApiResponse(order) {
+export async function buildOrderCheckApiResponse(order, prismaClient = prisma) {
+  const orderItemIds = (order.items ?? []).map((item) => item.id);
+  const duplicateItems = await findDuplicateReturnItems({
+    prisma: prismaClient,
+    merchantId: order.merchantId,
+    orderItemIds,
+  });
+  const duplicateByOrderItemId = duplicateItemsToMap(duplicateItems);
+
   const items = (order.items ?? []).map((item) =>
-    mapOrderItemToCheckItem(item, order, order.merchant)
+    applyDuplicateFlagsToCheckItem(
+      mapOrderItemToCheckItem(item, order, order.merchant),
+      duplicateByOrderItemId.get(item.id)
+    )
   );
   const orderEligible = items.some((item) => item.eligible);
 

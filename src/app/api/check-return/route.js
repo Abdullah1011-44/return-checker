@@ -49,7 +49,7 @@ export async function POST(request) {
     });
 
     if (order) {
-      return Response.json(buildOrderCheckApiResponse(order));
+      return Response.json(await buildOrderCheckApiResponse(order));
     }
 
     // Merchant session: never fall back to demo mock data

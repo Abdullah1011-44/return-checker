@@ -84,7 +84,7 @@ export default function Home() {
   }
 
   function toggleItemSelection(item) {
-    if (!item.eligible) return;
+    if (!item.eligible || item.alreadyReturnRequested) return;
     setSelectedItemIds((prev) =>
       prev.includes(item.id)
         ? prev.filter((id) => id !== item.id)
@@ -213,6 +213,28 @@ export default function Home() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
+        if (res.status === 409 && data.error === "DUPLICATE_RETURN_REQUEST") {
+          const duplicateTitles = (data.duplicateItems || [])
+            .map((item) => item.title || item.sku || item.orderItemId)
+            .filter(Boolean)
+            .join(", ");
+          setError(
+            duplicateTitles
+              ? `Return already requested for: ${duplicateTitles}`
+              : data.message ||
+                  "One or more selected items already have an active return request."
+          );
+          return;
+        }
+
+        if (data.error === "DUPLICATE_ITEM_IDS_IN_REQUEST") {
+          setError(
+            data.message ||
+              "The same item cannot be submitted more than once in a single request."
+          );
+          return;
+        }
+
         setError(data.message || "Something went wrong. Please try again.");
         return;
       }
@@ -399,7 +421,7 @@ export default function Home() {
                             </p>
                             {!item.eligible && item.ineligibleReason && (
                               <p className="text-xs text-red-600 mt-2 font-medium">
-                                {item.ineligibleReason}
+                                {item.duplicateReturnMessage || item.ineligibleReason}
                               </p>
                             )}
                           </div>
@@ -415,7 +437,9 @@ export default function Home() {
                             </span>
                           ) : (
                             <span className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 bg-red-50 text-red-700 border border-red-200">
-                              Not eligible
+                              {item.alreadyReturnRequested
+                                ? "Return requested"
+                                : "Not eligible"}
                             </span>
                           )}
                         </div>
