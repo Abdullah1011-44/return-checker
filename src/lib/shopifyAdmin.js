@@ -165,3 +165,122 @@ export function parseShopifyNextEndpoint(linkHeader) {
 
   return null;
 }
+
+function sanitizeGraphqlErrorText(text, maxLength = 300) {
+  if (!text || typeof text !== "string") {
+    return "";
+  }
+
+  return text
+    .replace(/shpat_[a-zA-Z0-9]+/gi, "[REDACTED]")
+    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
+    .slice(0, maxLength);
+}
+
+/**
+ * Call the Shopify Admin GraphQL API for a connected shop.
+ *
+ * Used for new GraphQL-based features (e.g. Task 20 product sync).
+ * Task 19 order sync continues to use {@link shopifyAdminRequest} (REST).
+ *
+ * POSTs to `/admin/api/{version}/graphql.json` with `{ query, variables }`.
+ * Returns `data` from the GraphQL response. Never logs accessToken or secrets.
+ *
+ * @param {object} params
+ * @param {string} params.shopDomain
+ * @param {string} params.accessToken
+ * @param {string} params.query
+ * @param {Record<string, unknown>} [params.variables]
+ * @returns {Promise<unknown>}
+ */
+export async function shopifyAdminGraphqlRequest({
+  shopDomain,
+  accessToken,
+  query,
+  variables = {},
+}) {
+  if (!shopDomain || !accessToken) {
+    throw new Error("Shopify GraphQL request failed");
+  }
+
+  if (!query) {
+    throw new Error("Shopify GraphQL request failed: query is required");
+  }
+
+  const url = `https://${shopDomain}/admin/api/${SHOPIFY_ADMIN_API_VERSION}/graphql.json`;
+
+  let response;
+
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": accessToken,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+  } catch (networkError) {
+    const error = new Error("Unable to connect to Shopify GraphQL API");
+    error.code = "SHOPIFY_GRAPHQL_NETWORK_ERROR";
+    error.cause = networkError;
+    throw error;
+  }
+
+  const bodyText = await response.text().catch(() => "");
+
+  if (!response.ok) {
+    const safeSnippet = sanitizeGraphqlErrorText(bodyText);
+
+    console.error("[Shopify GraphQL API Error]", {
+      status: response.status,
+      shopDomain,
+      code: "SHOPIFY_GRAPHQL_HTTP_ERROR",
+      hasToken: Boolean(accessToken),
+    });
+
+    const error = new Error(
+      safeSnippet
+        ? `Shopify GraphQL request failed with HTTP ${response.status}: ${safeSnippet}`
+        : `Shopify GraphQL request failed with HTTP ${response.status}`
+    );
+    error.status = response.status;
+    error.code = "SHOPIFY_GRAPHQL_HTTP_ERROR";
+    throw error;
+  }
+
+  let payload = null;
+
+  if (bodyText) {
+    try {
+      payload = JSON.parse(bodyText);
+    } catch {
+      const error = new Error("Shopify GraphQL response was not valid JSON");
+      error.code = "SHOPIFY_GRAPHQL_PARSE_ERROR";
+      throw error;
+    }
+  }
+
+  if (Array.isArray(payload?.errors) && payload.errors.length > 0) {
+    const messages = payload.errors
+      .map((entry) => entry?.message)
+      .filter(Boolean)
+      .join("; ");
+
+    console.error("[Shopify GraphQL API Error]", {
+      shopDomain,
+      code: "SHOPIFY_GRAPHQL_ERRORS",
+      errorCount: payload.errors.length,
+      hasToken: Boolean(accessToken),
+    });
+
+    const error = new Error(
+      messages || "Shopify GraphQL request returned errors"
+    );
+    error.code = "SHOPIFY_GRAPHQL_ERRORS";
+    error.graphqlErrors = payload.errors;
+    throw error;
+  }
+
+  return payload?.data ?? null;
+}

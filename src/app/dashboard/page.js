@@ -165,6 +165,10 @@ export default function Dashboard() {
   const [syncError, setSyncError] = useState("");
   const [syncHelper, setSyncHelper] = useState("");
   const [syncSummary, setSyncSummary] = useState(null);
+  const [productSyncing, setProductSyncing] = useState(false);
+  const [productSyncMessage, setProductSyncMessage] = useState("");
+  const [productSyncError, setProductSyncError] = useState("");
+  const [productSyncWarnings, setProductSyncWarnings] = useState([]);
 
   const pendingCount = countForFilter(requests, STATUS_FILTERS[1]);
   const attentionCount = countForFilter(requests, STATUS_FILTERS[2]);
@@ -250,6 +254,45 @@ export default function Dashboard() {
       setSyncError("Unable to sync Shopify orders");
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function handleSyncProducts() {
+    if (productSyncing) {
+      return;
+    }
+
+    setProductSyncing(true);
+    setProductSyncMessage("");
+    setProductSyncError("");
+    setProductSyncWarnings([]);
+
+    try {
+      const res = await fetch("/api/shopify/products/sync", { method: "POST" });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        if (data.error === "Missing Shopify connection") {
+          setProductSyncError("Missing Shopify connection");
+        } else if (res.status === 401 || data.error === "Unauthorized") {
+          setProductSyncError("Unauthorized");
+        } else {
+          setProductSyncError(data.error || "Unable to sync Shopify products");
+        }
+        return;
+      }
+
+      setProductSyncMessage(
+        `Synced ${data.productsSynced ?? 0} products and ${data.variantsSynced ?? 0} variants.`
+      );
+
+      if (Array.isArray(data.warnings) && data.warnings.length > 0) {
+        setProductSyncWarnings(data.warnings);
+      }
+    } catch {
+      setProductSyncError("Unable to sync Shopify products");
+    } finally {
+      setProductSyncing(false);
     }
   }
 
@@ -363,6 +406,14 @@ export default function Dashboard() {
             >
               {syncing ? "Syncing..." : "Sync Shopify Orders"}
             </button>
+            <button
+              type="button"
+              onClick={handleSyncProducts}
+              disabled={productSyncing}
+              className="text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed rounded-full px-4 py-2 shadow-sm transition-all duration-150"
+            >
+              {productSyncing ? "Syncing products..." : "Sync Products"}
+            </button>
             <a
               href="/analytics"
               className="text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded-full px-4 py-2 shadow-sm transition-all duration-150"
@@ -411,6 +462,28 @@ export default function Dashboard() {
             {syncHelper && (
               <p className="text-xs text-amber-700 bg-amber-50/80 border border-amber-200 rounded-xl px-4 py-3">
                 {syncHelper}
+              </p>
+            )}
+          </div>
+        )}
+
+        {(productSyncMessage || productSyncError || productSyncWarnings.length > 0) && (
+          <div className="mb-6 space-y-2">
+            {productSyncMessage && (
+              <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                {productSyncMessage}
+              </p>
+            )}
+            {productSyncWarnings.length > 0 && (
+              <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 space-y-1">
+                {productSyncWarnings.map((warning, index) => (
+                  <p key={`${index}-${warning}`}>{warning}</p>
+                ))}
+              </div>
+            )}
+            {productSyncError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                {productSyncError}
               </p>
             )}
           </div>
