@@ -9,25 +9,25 @@ datasource db {
 }
 
 model Merchant {
-  id                   String          @id @default(cuid())
+  id                   String           @id @default(cuid())
   shopName             String
-  email                String          @unique
-  role                 UserRole        @default(MERCHANT)
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
-  allowExchange        Boolean         @default(true)
-  allowKeepItem        Boolean         @default(false)
-  allowPartialRefund   Boolean         @default(true)
-  allowStoreCredit     Boolean         @default(true)
-  currency             String          @default("AUD")
-  freeExchangeShipping Boolean         @default(false)
-  isActive             Boolean         @default(true)
-  maxPartialRefundPct  Int             @default(40)
-  maxStoreCreditBonus  Int             @default(15)
+  email                String           @unique
+  role                 UserRole         @default(MERCHANT)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  allowExchange        Boolean          @default(true)
+  allowKeepItem        Boolean          @default(false)
+  allowPartialRefund   Boolean          @default(true)
+  allowStoreCredit     Boolean          @default(true)
+  currency             String           @default("AUD")
+  freeExchangeShipping Boolean          @default(false)
+  isActive             Boolean          @default(true)
+  maxPartialRefundPct  Int              @default(40)
+  maxStoreCreditBonus  Int              @default(15)
   onboardedAt          DateTime?
-  planTier             PlanTier        @default(FREE)
-  returnWindowDays     Int             @default(30)
-  shopDomain           String?         @unique
+  planTier             PlanTier         @default(FREE)
+  returnWindowDays     Int              @default(30)
+  shopDomain           String?          @unique
   shopLogoUrl          String?
   shopifyAccessToken   String?
   shopifyInstalledAt   DateTime?
@@ -39,6 +39,7 @@ model Merchant {
   users                MerchantUser[]
   returnRequests       ReturnRequest[]
   adminAuditLogs       AdminAuditLog[]
+  shopifyProducts      ShopifyProduct[]
 
   @@index([shopDomain])
   @@index([planTier])
@@ -95,15 +96,15 @@ model CustomerOrder {
 }
 
 model OrderItem {
-  id               String        @id @default(cuid())
-  orderId          String
-  productName      String
-  sku              String
-  quantity         Int
-  price            Decimal       @db.Decimal(10, 2)
-  isReturnable     Boolean       @default(true)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  orderId           String
+  productName       String
+  sku               String
+  quantity          Int
+  price             Decimal       @db.Decimal(10, 2)
+  isReturnable      Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
   shopifyLineItemId String?
   shopifyVariantId  String?
   variantName       String?
@@ -211,6 +212,60 @@ model AdminAuditLog {
   @@index([severity])
   @@index([createdAt])
   @@index([resourceType, resourceId])
+}
+
+model ShopifyProduct {
+  id                     String                  @id @default(cuid())
+  merchantId             String
+  shopifyProductGid      String
+  shopifyProductLegacyId String?
+  title                  String
+  handle                 String?
+  vendor                 String?
+  productType            String?
+  status                 String?
+  tags                   String?
+  featuredImageUrl       String?
+  onlineStoreUrl         String?
+  totalInventory         Int?
+  lastSyncedAt           DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  merchant               Merchant                @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  variants               ShopifyProductVariant[]
+
+  @@unique([merchantId, shopifyProductGid])
+  @@index([merchantId])
+  @@index([merchantId, shopifyProductLegacyId])
+  @@index([merchantId, handle])
+  @@index([merchantId, productType])
+}
+
+model ShopifyProductVariant {
+  id                     String         @id @default(cuid())
+  merchantId             String
+  productId              String
+  shopifyVariantGid      String
+  shopifyVariantLegacyId String?
+  title                  String
+  displayName            String?
+  sku                    String?
+  barcode                String?
+  price                  String?
+  compareAtPrice         String?
+  inventoryQuantity      Int?
+  availableForSale       Boolean?
+  selectedOptions        Json?
+  lastSyncedAt           DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  product                ShopifyProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, shopifyVariantGid])
+  @@index([merchantId])
+  @@index([merchantId, shopifyVariantLegacyId])
+  @@index([merchantId, sku])
+  @@index([productId])
 }
 
 enum OrderStatus {

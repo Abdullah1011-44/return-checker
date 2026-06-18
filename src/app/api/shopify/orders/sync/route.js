@@ -116,6 +116,10 @@ function resolveSyncFailureAudit(error) {
 }
 
 async function handleShopifySyncRouteError(error, meta = {}) {
+  console.log("=== SHOPIFY SYNC FULL ERROR ===");
+  console.dir(error, { depth: null });
+  console.log("==============================");
+
   const { syncContext, request } = meta;
   const requestContext = request
     ? getAuditRequestContext(request)

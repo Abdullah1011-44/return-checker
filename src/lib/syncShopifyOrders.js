@@ -6,7 +6,11 @@ import {
 
 const ORDERS_PAGE_LIMIT = 50;
 const MAX_ORDER_PAGES = 20;
-const INITIAL_ORDERS_ENDPOINT = `/orders.json?status=any&limit=${ORDERS_PAGE_LIMIT}`;
+// Minimal order fields only — avoids Protected Customer Data (email, name, phone, addresses).
+// Real customer email/name can be enabled after Shopify approves protected customer data access.
+const ORDER_FIELDS =
+  "id,name,order_number,total_price,currency,financial_status,fulfillment_status,cancelled_at,created_at,fulfillments,line_items,total_shipping_price_set";
+const INITIAL_ORDERS_ENDPOINT = `/orders.json?status=any&limit=${ORDERS_PAGE_LIMIT}&fields=${ORDER_FIELDS}`;
 
 /**
  * Map Shopify order status to Prisma OrderStatus.
@@ -70,24 +74,13 @@ function normalizeOrderNumber(order) {
   return String(order.id);
 }
 
+// This placeholder avoids Protected Customer Data access during development.
+// Real customer email/name can be enabled after Shopify approves protected customer data access.
 function resolveCustomerEmail(order) {
-  return (
-    order.email?.trim().toLowerCase() ||
-    order.customer?.email?.trim().toLowerCase() ||
-    ""
-  );
+  return `shopify-order-${order.id}@placeholder.returnradar.local`;
 }
 
 function resolveCustomerName(order) {
-  const customer = order.customer;
-  if (customer?.first_name || customer?.last_name) {
-    return [customer.first_name, customer.last_name].filter(Boolean).join(" ");
-  }
-
-  if (order.shipping_address?.name) {
-    return order.shipping_address.name;
-  }
-
   return "Shopify Customer";
 }
 
@@ -138,7 +131,7 @@ function buildCustomerOrderData(order, merchant) {
     status: mapShopifyOrderStatus(order),
     deliveredAt: mapShopifyDeliveredAt(order),
     currency: order.currency || merchant.currency || "USD",
-    customerPhone: order.phone || order.customer?.phone || null,
+    customerPhone: null,
     orderedAt: order.created_at ? new Date(order.created_at) : new Date(),
     shippingAmount: order.total_shipping_price_set?.shop_money?.amount ?? null,
   };
