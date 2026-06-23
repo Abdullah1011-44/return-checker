@@ -305,3 +305,29 @@ export async function syncShopifyOrders(merchantId) {
     pagesFetched: counts.pagesFetched,
   };
 }
+
+/**
+ * Sync Shopify orders (and embedded order status fields) for a merchant record.
+ *
+ * @param {{ id: string }} merchant
+ */
+export async function syncShopifyOrdersForMerchant(merchant) {
+  if (!merchant?.id) {
+    throw new Error("Merchant id is required for order sync");
+  }
+
+  return syncShopifyOrders(merchant.id);
+}
+
+/**
+ * Order status fields are updated during {@link syncShopifyOrders} /
+ * {@link syncShopifyOrdersForMerchant}. Extract a safe summary from that result.
+ *
+ * @param {Awaited<ReturnType<typeof syncShopifyOrders>> | null | undefined} orderSyncResult
+ */
+export function summarizeOrderStatusSyncFromOrders(orderSyncResult) {
+  return {
+    updated: orderSyncResult?.orders?.updated ?? 0,
+    skipped: orderSyncResult?.orders?.skipped ?? 0,
+  };
+}
