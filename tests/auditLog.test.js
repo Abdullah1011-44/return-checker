@@ -9,6 +9,7 @@ import {
   ADMIN_AUDIT_ACTORS,
   ADMIN_AUDIT_EVENTS,
   createAdminAuditLog,
+  logOrderStatusUpdated,
   safeCreateAdminAuditLog,
 } from "@/lib/adminAudit";
 import { mockPrisma } from "./helpers/mockPrisma.js";
@@ -87,6 +88,59 @@ describe("audit logging", () => {
         note: "Resolved by merchant",
       }),
     });
+  });
+
+  it("creates ORDER_STATUS_UPDATED admin audit log when order status changes", async () => {
+    const adminLog = { id: "admin-audit-order-status" };
+    mockPrisma.adminAuditLog.create.mockResolvedValue(adminLog);
+    const auditInfoSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const result = await logOrderStatusUpdated({
+      merchantId: "merchant-1",
+      orderId: "order-1",
+      oldStatus: "PENDING",
+      newStatus: "PAID",
+    });
+
+    expect(result).toEqual(adminLog);
+    expect(mockPrisma.adminAuditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        merchantId: "merchant-1",
+        actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
+        eventType: ADMIN_AUDIT_EVENTS.ORDER_STATUS_UPDATED,
+        resourceType: "CUSTOMER_ORDER",
+        resourceId: "order-1",
+        metadata: {
+          merchantId: "merchant-1",
+          orderId: "order-1",
+          oldStatus: "PENDING",
+          newStatus: "PAID",
+        },
+      }),
+    });
+    expect(auditInfoSpy).toHaveBeenCalledWith(
+      `[Audit] ${AUDIT_EVENTS.ORDER_STATUS_UPDATED}`,
+      {
+        merchantId: "merchant-1",
+        orderId: "order-1",
+        oldStatus: "PENDING",
+        newStatus: "PAID",
+      }
+    );
+
+    auditInfoSpy.mockRestore();
+  });
+
+  it("skips ORDER_STATUS_UPDATED audit log when status is unchanged", async () => {
+    const result = await logOrderStatusUpdated({
+      merchantId: "merchant-1",
+      orderId: "order-1",
+      oldStatus: "PAID",
+      newStatus: "PAID",
+    });
+
+    expect(result).toBeNull();
+    expect(mockPrisma.adminAuditLog.create).not.toHaveBeenCalled();
   });
 
   it("does not crash main action when audit persistence fails", async () => {

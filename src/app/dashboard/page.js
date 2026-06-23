@@ -1,6 +1,42 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RequestCard from "@/components/RequestCard";
+
+const REQUESTS_LOAD_TIMEOUT_MS = 30_000;
+
+async function fetchDashboardRequests(signal) {
+  const res = await fetch("/api/requests", {
+    method: "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+
+  let response = {};
+  try {
+    response = await res.json();
+  } catch {
+    response = {};
+  }
+
+  if (!res.ok || response?.success !== true) {
+    return {
+      ok: false,
+      requests: [],
+      message:
+        typeof response?.message === "string" && response.message
+          ? response.message
+          : "Failed to load return requests.",
+    };
+  }
+
+  return {
+    ok: true,
+    requests: Array.isArray(response.requests) ? response.requests : [],
+    message: "",
+  };
+}
 
 const STATUS_FILTERS = [
   { id: "ALL", label: "All", statuses: null },
@@ -169,16 +205,19 @@ export default function Dashboard() {
   const [productSyncMessage, setProductSyncMessage] = useState("");
   const [productSyncError, setProductSyncError] = useState("");
   const [productSyncWarnings, setProductSyncWarnings] = useState([]);
+  const loadAbortRef = useRef(null);
 
-  const pendingCount = countForFilter(requests, STATUS_FILTERS[1]);
-  const attentionCount = countForFilter(requests, STATUS_FILTERS[2]);
+  const safeRequests = Array.isArray(requests) ? requests : [];
+
+  const pendingCount = countForFilter(safeRequests, STATUS_FILTERS[1]);
+  const attentionCount = countForFilter(safeRequests, STATUS_FILTERS[2]);
 
   const activeFilterDef =
     STATUS_FILTERS.find((f) => f.id === activeFilter) ?? STATUS_FILTERS[0];
 
   const filteredRequests = useMemo(
-    () => requests.filter((r) => matchesFilter(r, activeFilterDef)),
-    [requests, activeFilterDef]
+    () => safeRequests.filter((r) => matchesFilter(r, activeFilterDef)),
+    [safeRequests, activeFilterDef]
   );
 
   const displayRequests = useMemo(
@@ -187,27 +226,53 @@ export default function Dashboard() {
   );
 
   const loadRequests = useCallback(async () => {
+    console.log("[DASHBOARD DEBUG] loadRequests started");
+
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+
     setLoading(true);
     setLoadError("");
+
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, REQUESTS_LOAD_TIMEOUT_MS);
+
     try {
-      const res = await fetch("/api/requests");
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setLoadError(data.message || "Failed to load return requests.");
-        setRequests([]);
+      const result = await fetchDashboardRequests(controller.signal);
+      console.log("[DASHBOARD DEBUG] fetchDashboardRequests result", result);
+
+      if (controller.signal.aborted) {
         return;
       }
-      setRequests(Array.isArray(data.requests) ? data.requests : []);
-    } catch {
+
+      if (result.ok) {
+        console.log("[DASHBOARD DEBUG] before setRequests", result.requests);
+        setRequests(result.requests);
+        setLoadError("");
+      } else {
+        setLoadError(result.message);
+        setRequests([]);
+      }
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return;
+      }
       setLoadError("Failed to load return requests.");
       setRequests([]);
     } finally {
+      clearTimeout(safetyTimer);
+      console.log("[DASHBOARD DEBUG] before setLoading(false)");
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadRequests();
+    return () => {
+      loadAbortRef.current?.abort();
+    };
   }, [loadRequests]);
 
   async function handleSyncShopifyOrders() {
@@ -421,7 +486,7 @@ export default function Dashboard() {
               View Analytics
             </a>
             <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
-              {requests.length} requests
+              {safeRequests.length} requests
             </span>
             <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1.5">
               {pendingCount} pending
@@ -489,11 +554,11 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && !loadError && requests.length > 0 && (
+        {!loading && !loadError && safeRequests.length > 0 && (
           <div className="mb-6 flex flex-wrap items-center gap-2 justify-between">
             <div className="flex flex-wrap gap-2">
               {STATUS_FILTERS.map((filter) => {
-                const count = countForFilter(requests, filter);
+                const count = countForFilter(safeRequests, filter);
                 const isActive = activeFilter === filter.id;
 
                 return (
@@ -558,7 +623,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && !loadError && requests.length === 0 && (
+        {!loading && !loadError && safeRequests.length === 0 && (
           <div className="text-center py-20 text-slate-400">
             <p className="text-4xl mb-3">📭</p>
             <p className="text-sm font-medium">No return requests yet.</p>
@@ -566,7 +631,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && !loadError && requests.length > 0 && filteredRequests.length === 0 && (
+        {!loading && !loadError && safeRequests.length > 0 && filteredRequests.length === 0 && (
           <div className="text-center py-16 text-slate-400">
             <p className="text-sm font-medium">No requests match this filter.</p>
             <button

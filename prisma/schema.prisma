@@ -74,8 +74,11 @@ model CustomerOrder {
   customerEmail  String
   customerName   String
   totalAmount    Decimal         @db.Decimal(10, 2)
-  status         OrderStatus     @default(PENDING)
-  deliveredAt    DateTime?
+  status            OrderStatus     @default(PENDING)
+  financialStatus   String?
+  fulfillmentStatus String?
+  cancelledAt       DateTime?
+  deliveredAt       DateTime?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   currency       String          @default("USD")

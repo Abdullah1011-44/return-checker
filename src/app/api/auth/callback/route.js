@@ -1,5 +1,12 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import {
+  ADMIN_AUDIT_ACTORS,
+  ADMIN_AUDIT_EVENTS,
+  ADMIN_AUDIT_SEVERITY,
+  safeCreateAdminAuditLog,
+} from "@/lib/adminAudit";
+import { AUDIT_EVENTS, logAuditInfo } from "@/lib/audit";
 import { createMerchantSession } from "@/lib/auth";
 import { isDevelopment, isMissingEnvError } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +19,72 @@ import {
   validateShopDomain,
   verifyShopifyOAuthCallback,
 } from "@/lib/shopifyOAuth";
+import { registerShopifyWebhooks } from "@/lib/shopifyWebhooks";
+
+async function registerWebhooksAfterInstall({ merchant, shopDomain, accessToken }) {
+  let webhookResult = {
+    success: false,
+    registered: [],
+    skipped: [],
+    failed: [],
+  };
+
+  try {
+    webhookResult = await registerShopifyWebhooks({
+      shopDomain,
+      accessToken,
+    });
+  } catch (error) {
+    console.warn("[GET /api/auth/callback] Webhook registration failed", {
+      shopDomain,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    webhookResult.failed.push({
+      reason: "Webhook registration threw unexpectedly",
+    });
+  }
+
+  if (!webhookResult.success) {
+    console.warn(
+      "[GET /api/auth/callback] Shopify webhook registration completed with failures",
+      {
+        shopDomain,
+        registeredCount: webhookResult.registered.length,
+        skippedCount: webhookResult.skipped.length,
+        failedCount: webhookResult.failed.length,
+      }
+    );
+  }
+
+  if (!merchant?.id) {
+    return webhookResult;
+  }
+
+  const auditMetadata = {
+    shopDomain,
+    registeredCount: webhookResult.registered.length,
+    skippedCount: webhookResult.skipped.length,
+    failedCount: webhookResult.failed.length,
+  };
+
+  logAuditInfo(AUDIT_EVENTS.WEBHOOKS_REGISTERED, auditMetadata);
+
+  await safeCreateAdminAuditLog({
+    merchantId: merchant.id,
+    actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
+    severity: webhookResult.success
+      ? ADMIN_AUDIT_SEVERITY.INFO
+      : ADMIN_AUDIT_SEVERITY.WARN,
+    eventType: ADMIN_AUDIT_EVENTS.WEBHOOKS_REGISTERED,
+    resourceType: "SHOPIFY_WEBHOOK",
+    message: webhookResult.success
+      ? "Shopify webhooks registered after OAuth install"
+      : "Shopify webhook registration completed with failures",
+    metadata: auditMetadata,
+  });
+
+  return webhookResult;
+}
 
 /**
  * GET /api/auth/callback
@@ -22,7 +95,8 @@ import {
  * 3. Verify HMAC via @shopify/shopify-api
  * 4. Exchange code for access token (server-side only)
  * 5. Upsert Merchant in Prisma
- * 6. Create merchant session → clear state cookie → redirect to /dashboard
+ * 6. Register Shopify webhooks (non-blocking)
+ * 7. Create merchant session → clear state cookie → redirect to /dashboard
  */
 export async function GET(request) {
   try {
@@ -101,6 +175,12 @@ export async function GET(request) {
       accessToken,
       scope
     );
+
+    await registerWebhooksAfterInstall({
+      merchant,
+      shopDomain: shopCheck.shop,
+      accessToken,
+    });
 
     await createMerchantSession(merchant);
 

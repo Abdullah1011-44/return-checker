@@ -1,4 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import { logOrderStatusUpdated } from "@/lib/adminAudit";
+import {
+  buildOrderStatusFields,
+  getOrderStatusFieldUpdates,
+} from "@/lib/orderStatusMapper";
 import {
   parseShopifyNextEndpoint,
   shopifyAdminRequest,
@@ -11,39 +16,6 @@ const MAX_ORDER_PAGES = 20;
 const ORDER_FIELDS =
   "id,name,order_number,total_price,currency,financial_status,fulfillment_status,cancelled_at,created_at,fulfillments,line_items,total_shipping_price_set";
 const INITIAL_ORDERS_ENDPOINT = `/orders.json?status=any&limit=${ORDERS_PAGE_LIMIT}&fields=${ORDER_FIELDS}`;
-
-/**
- * Map Shopify order status to Prisma OrderStatus.
- * Schema supports PENDING, PAID, FULFILLED, DELIVERED, CANCELLED only —
- * refunded/partially_refunded map to PAID with a note in code.
- */
-export function mapShopifyOrderStatus(order) {
-  if (order.cancelled_at) {
-    return "CANCELLED";
-  }
-
-  // No REFUNDED / PARTIALLY_REFUNDED enum — treat as PAID (financially settled).
-  if (
-    order.financial_status === "refunded" ||
-    order.financial_status === "partially_refunded"
-  ) {
-    return "PAID";
-  }
-
-  if (order.fulfillment_status === "fulfilled") {
-    return "DELIVERED";
-  }
-
-  if (order.financial_status === "paid") {
-    return "PAID";
-  }
-
-  if (order.financial_status === "pending") {
-    return "PENDING";
-  }
-
-  return "PAID";
-}
 
 /**
  * Use fulfillment timestamp only — not order.updated_at (changes on any edit).
@@ -128,7 +100,7 @@ function buildCustomerOrderData(order, merchant) {
     customerEmail: resolveCustomerEmail(order),
     customerName: resolveCustomerName(order),
     totalAmount: order.total_price ?? "0",
-    status: mapShopifyOrderStatus(order),
+    ...buildOrderStatusFields(order),
     deliveredAt: mapShopifyDeliveredAt(order),
     currency: order.currency || merchant.currency || "USD",
     customerPhone: null,
@@ -233,7 +205,7 @@ export async function syncShopifyOrders(merchantId) {
   );
 
   const counts = {
-    orders: { created: 0, updated: 0, totalSynced: 0 },
+    orders: { created: 0, updated: 0, skipped: 0 },
     items: { created: 0, updated: 0, totalSynced: 0 },
     pagesFetched,
   };
@@ -254,11 +226,30 @@ export async function syncShopifyOrders(merchantId) {
     let customerOrder;
 
     if (existingOrder) {
-      customerOrder = await prisma.customerOrder.update({
-        where: { id: existingOrder.id },
-        data: orderFields,
-      });
-      counts.orders.updated += 1;
+      const statusUpdates = getOrderStatusFieldUpdates(
+        existingOrder,
+        shopifyOrder
+      );
+
+      if (statusUpdates) {
+        customerOrder = await prisma.customerOrder.update({
+          where: { id: existingOrder.id },
+          data: statusUpdates,
+        });
+        counts.orders.updated += 1;
+
+        if (statusUpdates.status) {
+          await logOrderStatusUpdated({
+            merchantId: merchant.id,
+            orderId: existingOrder.id,
+            oldStatus: existingOrder.status,
+            newStatus: statusUpdates.status,
+          });
+        }
+      } else {
+        customerOrder = existingOrder;
+        counts.orders.skipped += 1;
+      }
     } else {
       customerOrder = await prisma.customerOrder.create({
         data: {
@@ -269,8 +260,6 @@ export async function syncShopifyOrders(merchantId) {
       });
       counts.orders.created += 1;
     }
-
-    counts.orders.totalSynced += 1;
 
     const lineItems = Array.isArray(shopifyOrder.line_items)
       ? shopifyOrder.line_items

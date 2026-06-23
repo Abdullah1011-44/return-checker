@@ -1,4 +1,4 @@
-import { sanitizeAuditMetadata } from "@/lib/audit";
+import { AUDIT_EVENTS, logAuditInfo, sanitizeAuditMetadata } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -16,6 +16,7 @@ export const ADMIN_AUDIT_EVENTS = {
   SHOPIFY_SYNC_STARTED: "SHOPIFY_SYNC_STARTED",
   SHOPIFY_SYNC_COMPLETED: "SHOPIFY_SYNC_COMPLETED",
   SHOPIFY_SYNC_FAILED: "SHOPIFY_SYNC_FAILED",
+  ORDER_STATUS_UPDATED: "ORDER_STATUS_UPDATED",
   SHOPIFY_PRODUCTS_SYNC_STARTED: "SHOPIFY_PRODUCTS_SYNC_STARTED",
   SHOPIFY_PRODUCTS_SYNC_COMPLETED: "SHOPIFY_PRODUCTS_SYNC_COMPLETED",
   SHOPIFY_PRODUCTS_SYNC_FAILED: "SHOPIFY_PRODUCTS_SYNC_FAILED",
@@ -23,6 +24,12 @@ export const ADMIN_AUDIT_EVENTS = {
     "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
   WEBHOOK_RECEIVED: "WEBHOOK_RECEIVED",
   WEBHOOK_INVALID_HMAC: "WEBHOOK_INVALID_HMAC",
+  WEBHOOKS_REGISTERED: "WEBHOOKS_REGISTERED",
+  ORDER_CREATED_WEBHOOK: "ORDER_CREATED_WEBHOOK",
+  ORDER_UPDATED_WEBHOOK: "ORDER_UPDATED_WEBHOOK",
+  ORDER_UPDATED_WEBHOOK_IGNORED: "ORDER_UPDATED_WEBHOOK_IGNORED",
+  FULFILLMENT_CREATED_WEBHOOK: "FULFILLMENT_CREATED_WEBHOOK",
+  PRODUCT_UPDATED_WEBHOOK: "PRODUCT_UPDATED_WEBHOOK",
   APP_UNINSTALLED: "APP_UNINSTALLED",
   CUSTOMERS_DATA_REQUEST: "CUSTOMERS_DATA_REQUEST",
   CUSTOMERS_REDACT: "CUSTOMERS_REDACT",
@@ -165,5 +172,40 @@ export async function logUnauthorizedApiAccess(
       reason,
     }),
     ...getAuditRequestContext(request),
+  });
+}
+
+/**
+ * Log a customer order status change from Shopify sync.
+ * Skips when status is unchanged.
+ */
+export async function logOrderStatusUpdated({
+  merchantId,
+  orderId,
+  oldStatus,
+  newStatus,
+}) {
+  if (!merchantId || !orderId || !oldStatus || !newStatus || oldStatus === newStatus) {
+    return null;
+  }
+
+  const metadata = sanitizeAdminAuditMetadata({
+    merchantId,
+    orderId,
+    oldStatus,
+    newStatus,
+  });
+
+  logAuditInfo(AUDIT_EVENTS.ORDER_STATUS_UPDATED, metadata);
+
+  return safeCreateAdminAuditLog({
+    merchantId,
+    actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
+    severity: ADMIN_AUDIT_SEVERITY.INFO,
+    eventType: ADMIN_AUDIT_EVENTS.ORDER_STATUS_UPDATED,
+    resourceType: "CUSTOMER_ORDER",
+    resourceId: orderId,
+    message: "Order status updated from Shopify sync",
+    metadata,
   });
 }

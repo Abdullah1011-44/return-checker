@@ -93,6 +93,26 @@ function mapReturnItemToUi(returnItem) {
   };
 }
 
+function mapOrderStatusForDashboard(order) {
+  if (!order) {
+    return {
+      status: null,
+      financialStatus: null,
+      fulfillmentStatus: null,
+      cancelledAt: null,
+    };
+  }
+
+  return {
+    status: order.status ?? null,
+    financialStatus: order.financialStatus ?? null,
+    fulfillmentStatus: order.fulfillmentStatus ?? null,
+    cancelledAt:
+      order.cancelledAt?.toISOString?.() ??
+      (order.cancelledAt ? String(order.cancelledAt) : null),
+  };
+}
+
 export function mapReturnRequestToDashboard(returnRequest) {
   const selectedItems = (returnRequest.items ?? []).map(mapReturnItemToUi);
   const primaryReason = getPrimaryReasonKey(
@@ -123,6 +143,7 @@ export function mapReturnRequestToDashboard(returnRequest) {
     id: returnRequest.id,
     orderNumber: returnRequest.order?.orderNumber ?? "",
     email: returnRequest.customerEmail,
+    orderStatus: mapOrderStatusForDashboard(returnRequest.order),
     rawStatus: returnRequest.status,
     status: STATUS_TO_UI[returnRequest.status] ?? returnRequest.status,
     reason: primaryReason,

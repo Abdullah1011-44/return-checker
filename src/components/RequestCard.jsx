@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AnalyticsCard from "@/components/AnalyticsCard";
+import OrderStatusBadges from "@/components/OrderStatusBadges";
 import StatusBadge from "@/components/StatusBadge";
 import ProgressBar from "@/components/ProgressBar.jsx";
 import { getItemRecommendedAction } from "@/lib/returnRequests";
@@ -148,6 +149,7 @@ export default function RequestCard({
                 Order #{request.orderNumber}
               </p>
               <p className="text-sm font-semibold text-slate-800">{request.email}</p>
+              <OrderStatusBadges orderStatus={request.orderStatus} />
               <div className="flex flex-wrap gap-2 mt-2">
                 {selectedItems.length > 0 ? (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-100 rounded-full px-3 py-1">
