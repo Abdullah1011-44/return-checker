@@ -79,7 +79,7 @@ export function mapReturnRequestToCustomerStatus(returnRequest) {
   const items = (returnRequest.items ?? []).map((returnItem) => {
     const orderItem = returnItem.orderItem;
     return {
-      id: returnItem.id,
+      
       productName: orderItem?.productName ?? "Item",
       sku: orderItem?.sku ?? "",
       quantity: orderItem?.quantity ?? 1,
@@ -98,7 +98,7 @@ export function mapReturnRequestToCustomerStatus(returnRequest) {
     returnRequest.updatedAt?.toISOString?.() ?? returnRequest.updatedAt;
 
   return {
-    id: returnRequest.id,
+   
     orderNumber: returnRequest.order?.orderNumber ?? "",
     email: returnRequest.customerEmail,
     status:
