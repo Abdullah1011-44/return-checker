@@ -226,7 +226,7 @@ export default function Dashboard() {
   );
 
   const loadRequests = useCallback(async () => {
-    console.log("[DASHBOARD DEBUG] loadRequests started");
+    
 
     loadAbortRef.current?.abort();
     const controller = new AbortController();
@@ -241,14 +241,14 @@ export default function Dashboard() {
 
     try {
       const result = await fetchDashboardRequests(controller.signal);
-      console.log("[DASHBOARD DEBUG] fetchDashboardRequests result", result);
+      
 
       if (controller.signal.aborted) {
         return;
       }
 
       if (result.ok) {
-        console.log("[DASHBOARD DEBUG] before setRequests", result.requests);
+       
         setRequests(result.requests);
         setLoadError("");
       } else {
@@ -263,7 +263,7 @@ export default function Dashboard() {
       setRequests([]);
     } finally {
       clearTimeout(safetyTimer);
-      console.log("[DASHBOARD DEBUG] before setLoading(false)");
+      
       setLoading(false);
     }
   }, []);
@@ -308,6 +308,14 @@ export default function Dashboard() {
         return;
       }
 
+      if (data.queued) {
+        setSyncMessage(
+          data.message || "Shopify sync queued. Orders and products will update shortly."
+        );
+        setSyncSummary(null);
+        return;
+      }
+
       setSyncMessage("Shopify orders synced successfully");
       setSyncSummary({
         ordersCreated: data.orders?.created ?? 0,
@@ -344,6 +352,14 @@ export default function Dashboard() {
         } else {
           setProductSyncError(data.error || "Unable to sync Shopify products");
         }
+        return;
+      }
+
+      if (data.queued) {
+        setProductSyncMessage(
+          data.message || "Shopify sync queued. Products will update shortly."
+        );
+        setProductSyncWarnings([]);
         return;
       }
 

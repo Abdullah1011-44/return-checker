@@ -56,6 +56,33 @@ describe("shopifySyncRunner", () => {
     });
   });
 
+  it("runs only product sync for manual:dashboard-products", async () => {
+    const summary = await runShopifySyncForMerchant({
+      merchantId: "merchant-1",
+      reason: "manual:dashboard-products",
+    });
+
+    expect(mockSyncShopifyOrdersForMerchant).not.toHaveBeenCalled();
+    expect(mockSyncShopifyProductsForMerchant).toHaveBeenCalledOnce();
+    expect(summary.productsSynced).toBe(5);
+    expect(summary.ordersSynced).toBe(0);
+    expect(summary.orders).toBeNull();
+    expect(summary.orderStatuses).toBeNull();
+  });
+
+  it("runs only order sync for manual:dashboard-orders", async () => {
+    const summary = await runShopifySyncForMerchant({
+      merchantId: "merchant-1",
+      reason: "manual:dashboard-orders",
+    });
+
+    expect(mockSyncShopifyOrdersForMerchant).toHaveBeenCalledOnce();
+    expect(mockSyncShopifyProductsForMerchant).not.toHaveBeenCalled();
+    expect(summary.ordersSynced).toBe(5);
+    expect(summary.productsSynced).toBe(0);
+    expect(summary.products).toBeNull();
+  });
+
   it("runs order then product sync and returns safe summary", async () => {
     const summary = await runShopifySyncForMerchant({
       merchantId: "merchant-1",
@@ -179,5 +206,39 @@ describe("shopifySyncRunner", () => {
     expect(summary.ordersSynced).toBe(1);
     expect(summary.productsSynced).toBe(2);
     expect(summary.statusUpdated).toBe(0);
+  });
+
+  it("buildSafeMerchantSyncSummary handles null order or product results", () => {
+    const productsOnly = buildSafeMerchantSyncSummary({
+      merchant: merchantRecord,
+      orderSyncResult: null,
+      productSyncResult: {
+        productsSynced: 3,
+        variantsSynced: 6,
+        pagesSynced: 1,
+        warnings: [],
+      },
+      reason: "manual:dashboard-products",
+    });
+
+    expect(productsOnly.orders).toBeNull();
+    expect(productsOnly.orderStatuses).toBeNull();
+    expect(productsOnly.ordersSynced).toBe(0);
+    expect(productsOnly.productsSynced).toBe(3);
+
+    const ordersOnly = buildSafeMerchantSyncSummary({
+      merchant: merchantRecord,
+      orderSyncResult: {
+        orders: { created: 1, updated: 2, skipped: 0 },
+        items: { totalSynced: 3 },
+        pagesFetched: 1,
+      },
+      productSyncResult: null,
+      reason: "manual:dashboard-orders",
+    });
+
+    expect(ordersOnly.products).toBeNull();
+    expect(ordersOnly.productsSynced).toBe(0);
+    expect(ordersOnly.ordersSynced).toBe(3);
   });
 });

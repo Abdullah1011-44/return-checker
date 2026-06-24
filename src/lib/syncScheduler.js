@@ -5,10 +5,8 @@ import {
   safeCreateAdminAuditLog,
 } from "@/lib/adminAudit";
 import { AUDIT_ACTORS, AUDIT_EVENTS, logAuditInfo, sanitizeAuditMetadata } from "@/lib/audit";
-import {
-  findActiveMerchantsForSync,
-  runShopifySyncForMerchant,
-} from "@/lib/shopifySyncRunner";
+import { findActiveMerchantsForSync } from "@/lib/shopifySyncRunner";
+import { queueShopifySyncForMerchant } from "@/lib/shopifySyncQueue";
 
 const DEFAULT_MERCHANT_LIMIT = 10;
 const MAX_MERCHANT_LIMIT = 25;
@@ -39,7 +37,7 @@ function safeErrorMessage(error) {
     return error.message;
   }
 
-  return "Shopify sync scheduler merchant failure";
+  return "Shopify sync scheduler queue failure";
 }
 
 async function logSchedulerStarted(trigger, merchantLimit) {
@@ -60,14 +58,12 @@ async function logSchedulerStarted(trigger, merchantLimit) {
   });
 }
 
-async function logSchedulerMerchantSuccess(merchant, summary) {
+async function logSchedulerMerchantQueued(merchant, queueResult) {
   const metadata = buildSchedulerAuditMeta({
     merchantId: merchant.id,
     shopDomain: merchant.shopDomain,
-    ordersCreated: summary.orders?.created ?? 0,
-    ordersUpdated: summary.orders?.updated ?? 0,
-    productsSynced: summary.products?.productsSynced ?? 0,
-    orderStatusesUpdated: summary.orderStatuses?.updated ?? 0,
+    reason: queueResult.reason,
+    requestedAt: queueResult.requestedAt,
   });
 
   logAuditInfo(AUDIT_EVENTS.SHOPIFY_SYNC_SCHEDULER_MERCHANT_SUCCESS, {
@@ -81,12 +77,12 @@ async function logSchedulerMerchantSuccess(merchant, summary) {
     actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
     severity: ADMIN_AUDIT_SEVERITY.INFO,
     resourceType: "SHOPIFY_SYNC_SCHEDULER",
-    message: "Shopify sync scheduler merchant sync completed",
+    message: "Shopify sync scheduler merchant job queued",
     metadata,
   });
 }
 
-async function logSchedulerMerchantFailed(merchant, error) {
+async function logSchedulerMerchantQueueFailed(merchant, error) {
   const metadata = buildSchedulerAuditMeta({
     merchantId: merchant.id,
     shopDomain: merchant.shopDomain,
@@ -105,7 +101,7 @@ async function logSchedulerMerchantFailed(merchant, error) {
     actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
     severity: ADMIN_AUDIT_SEVERITY.ERROR,
     resourceType: "SHOPIFY_SYNC_SCHEDULER",
-    message: "Shopify sync scheduler merchant sync failed",
+    message: "Shopify sync scheduler merchant queue failed",
     metadata,
   });
 }
@@ -114,8 +110,9 @@ async function logSchedulerFinished(trigger, summary) {
   const metadata = buildSchedulerAuditMeta({
     trigger,
     merchantCount: summary.merchantCount,
-    successCount: summary.successCount,
-    failureCount: summary.failureCount,
+    queuedCount: summary.queuedCount,
+    skippedCount: summary.skippedCount,
+    errorCount: summary.errorCount,
     durationMs: summary.durationMs,
   });
 
@@ -135,8 +132,7 @@ async function logSchedulerFinished(trigger, summary) {
 }
 
 /**
- * Run Shopify order, order-status, and product sync for active merchants.
- * Merchants are processed sequentially to reduce serverless timeout risk.
+ * Queue Shopify sync jobs for active merchants via Inngest.
  *
  * @param {{ trigger?: "manual" | "cron", merchantLimit?: number }} [options]
  */
@@ -152,46 +148,47 @@ export async function runShopifySyncScheduler(options = {}) {
 
   for (const merchant of merchants) {
     try {
-      const summary = await runShopifySyncForMerchant({
+      const queueResult = await queueShopifySyncForMerchant({
         merchantId: merchant.id,
         reason: `scheduler:${trigger}`,
       });
 
       results.push({
-        merchantId: summary.merchantId,
-        shopDomain: summary.shopDomain,
-        ok: summary.success,
-        orders: summary.orders,
-        products: summary.products,
-        orderStatuses: summary.orderStatuses,
+        merchantId: merchant.id,
+        shopDomain: merchant.shopDomain,
+        ok: true,
+        queued: true,
+        reason: queueResult.reason,
+        requestedAt: queueResult.requestedAt,
         error: null,
       });
 
-      await logSchedulerMerchantSuccess(merchant, summary);
+      await logSchedulerMerchantQueued(merchant, queueResult);
     } catch (error) {
       results.push({
         merchantId: merchant.id,
         shopDomain: merchant.shopDomain,
         ok: false,
-        orders: null,
-        products: null,
-        orderStatuses: null,
+        queued: false,
+        reason: null,
+        requestedAt: null,
         error: safeErrorMessage(error),
       });
 
-      await logSchedulerMerchantFailed(merchant, error);
+      await logSchedulerMerchantQueueFailed(merchant, error);
     }
   }
 
   const finishedAt = new Date();
-  const successCount = results.filter((result) => result.ok).length;
-  const failureCount = results.length - successCount;
+  const queuedCount = results.filter((result) => result.ok).length;
+  const errorCount = results.length - queuedCount;
   const durationMs = finishedAt.getTime() - startedAt.getTime();
 
   await logSchedulerFinished(trigger, {
     merchantCount: results.length,
-    successCount,
-    failureCount,
+    queuedCount,
+    skippedCount: 0,
+    errorCount,
     durationMs,
   });
 
@@ -202,6 +199,9 @@ export async function runShopifySyncScheduler(options = {}) {
     finishedAt: finishedAt.toISOString(),
     durationMs,
     merchantCount: results.length,
+    queuedCount,
+    skippedCount: 0,
+    errorCount,
     results,
   };
 }

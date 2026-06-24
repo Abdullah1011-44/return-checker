@@ -83,6 +83,24 @@ function summarizeProductsResult(productSyncResult) {
   };
 }
 
+const MANUAL_PRODUCTS_SYNC_REASON = "manual:dashboard-products";
+const MANUAL_ORDERS_SYNC_REASON = "manual:dashboard-orders";
+
+function resolveSyncScope(reason) {
+  const normalized =
+    typeof reason === "string" && reason.trim() ? reason.trim() : null;
+
+  if (normalized === MANUAL_PRODUCTS_SYNC_REASON) {
+    return "products-only";
+  }
+
+  if (normalized === MANUAL_ORDERS_SYNC_REASON) {
+    return "orders-only";
+  }
+
+  return "both";
+}
+
 export function buildSafeMerchantSyncSummary({
   merchant,
   orderSyncResult,
@@ -92,7 +110,9 @@ export function buildSafeMerchantSyncSummary({
 }) {
   const orders = summarizeOrdersResult(orderSyncResult);
   const products = summarizeProductsResult(productSyncResult);
-  const orderStatuses = summarizeOrderStatusSyncFromOrders(orderSyncResult);
+  const orderStatuses = orderSyncResult
+    ? summarizeOrderStatusSyncFromOrders(orderSyncResult)
+    : null;
 
   return {
     success,
@@ -224,12 +244,21 @@ export async function runShopifySyncForMerchant({ merchantId, reason } = {}) {
   }
 
   try {
-    const orderSyncResult = await syncShopifyOrdersForMerchant(merchant);
-    const productSyncResult = await syncShopifyProductsForMerchant({
-      id: merchant.id,
-      shopDomain: merchant.shopDomain,
-      accessToken: merchant.shopifyAccessToken,
-    });
+    const syncScope = resolveSyncScope(reason);
+    let orderSyncResult = null;
+    let productSyncResult = null;
+
+    if (syncScope === "both" || syncScope === "orders-only") {
+      orderSyncResult = await syncShopifyOrdersForMerchant(merchant);
+    }
+
+    if (syncScope === "both" || syncScope === "products-only") {
+      productSyncResult = await syncShopifyProductsForMerchant({
+        id: merchant.id,
+        shopDomain: merchant.shopDomain,
+        accessToken: merchant.shopifyAccessToken,
+      });
+    }
 
     const summary = buildSafeMerchantSyncSummary({
       merchant,

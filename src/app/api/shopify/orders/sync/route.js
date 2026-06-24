@@ -24,8 +24,8 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { captureException } from "@/lib/sentry";
 import {
   getMerchantSyncAuditContext,
-  syncShopifyOrders,
 } from "@/lib/syncShopifyOrders";
+import { queueShopifySyncForMerchant } from "@/lib/shopifySyncQueue";
 
 function isProtectedCustomerDataError(error) {
   return (
@@ -303,7 +303,7 @@ export async function POST(request) {
       actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
       severity: ADMIN_AUDIT_SEVERITY.INFO,
       resourceType: "SHOPIFY_SYNC",
-      message: "Shopify order sync started",
+      message: "Shopify order sync queued",
       metadata: {
         shopDomain: syncContext.shopDomain,
         hasToken: syncContext.hasToken,
@@ -311,15 +311,25 @@ export async function POST(request) {
       ...requestContext,
     });
 
-    const result = await syncShopifyOrders(merchant.id);
+    if (!syncContext.hasToken || !syncContext.shopDomain) {
+      return createApiErrorResponse(
+        "Missing Shopify connection",
+        400,
+        "MISSING_SHOPIFY_CONNECTION"
+      );
+    }
+
+    const queueResult = await queueShopifySyncForMerchant({
+      merchantId: merchant.id,
+      reason: "manual:dashboard-orders",
+    });
 
     logAuditInfo(
       AUDIT_EVENTS.SHOPIFY_SYNC_COMPLETED,
       buildSyncAuditMeta(syncContext, {
         actorType: AUDIT_ACTORS.SYSTEM,
-        createdOrders: result.orders?.created ?? 0,
-        updatedOrders: result.orders?.updated ?? 0,
-        syncedItems: result.items?.totalSynced ?? 0,
+        queued: true,
+        requestedAt: queueResult.requestedAt,
       })
     );
 
@@ -329,21 +339,20 @@ export async function POST(request) {
       actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
       severity: ADMIN_AUDIT_SEVERITY.INFO,
       resourceType: "SHOPIFY_SYNC",
-      message: "Shopify order sync completed",
+      message: "Shopify order sync queued",
       metadata: {
         shopDomain: syncContext.shopDomain,
-        createdOrders: result.orders?.created ?? 0,
-        updatedOrders: result.orders?.updated ?? 0,
-        syncedItems: result.items?.totalSynced ?? 0,
+        queued: true,
+        requestedAt: queueResult.requestedAt,
       },
       ...requestContext,
     });
 
     return NextResponse.json({
       success: true,
-      orders: result.orders,
-      items: result.items,
-      pagesFetched: result.pagesFetched,
+      queued: true,
+      message: "Shopify sync queued",
+      requestedAt: queueResult.requestedAt,
     });
   } catch (error) {
     if (!syncContext && merchant?.id) {
