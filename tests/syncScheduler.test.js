@@ -1,27 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mockPrisma, resetMockPrisma } from "./helpers/mockPrisma.js";
 
-const mockSyncShopifyOrdersForMerchant = vi.fn();
-const mockSyncShopifyProductsForMerchant = vi.fn();
+const mockFindActiveMerchantsForSync = vi.fn();
+const mockRunShopifySyncForMerchant = vi.fn();
 const mockSafeCreateAdminAuditLog = vi.fn();
 const mockLogAuditInfo = vi.fn();
 
-vi.mock("@/lib/prisma", () => ({
-  prisma: mockPrisma,
-}));
-
-vi.mock("@/lib/syncShopifyOrders", () => ({
-  syncShopifyOrdersForMerchant: (...args) =>
-    mockSyncShopifyOrdersForMerchant(...args),
-  summarizeOrderStatusSyncFromOrders: (orderSyncResult) => ({
-    updated: orderSyncResult?.orders?.updated ?? 0,
-    skipped: orderSyncResult?.orders?.skipped ?? 0,
-  }),
-}));
-
-vi.mock("@/lib/shopifyProductSync", () => ({
-  syncShopifyProductsForMerchant: (...args) =>
-    mockSyncShopifyProductsForMerchant(...args),
+vi.mock("@/lib/shopifySyncRunner", () => ({
+  findActiveMerchantsForSync: (...args) => mockFindActiveMerchantsForSync(...args),
+  runShopifySyncForMerchant: (...args) => mockRunShopifySyncForMerchant(...args),
 }));
 
 vi.mock("@/lib/adminAudit", () => ({
@@ -57,34 +43,48 @@ import { runShopifySyncScheduler } from "@/lib/syncScheduler";
 const merchantA = {
   id: "merchant-a",
   shopDomain: "shop-a.myshopify.com",
-  shopifyAccessToken: "token-a",
 };
 
 const merchantB = {
   id: "merchant-b",
   shopDomain: "shop-b.myshopify.com",
-  shopifyAccessToken: "token-b",
 };
 
-describe("runShopifySyncScheduler", () => {
-  beforeEach(() => {
-    resetMockPrisma();
-    vi.clearAllMocks();
-    mockSafeCreateAdminAuditLog.mockResolvedValue(null);
-    mockPrisma.merchant.findMany.mockResolvedValue([merchantA, merchantB]);
-    mockSyncShopifyOrdersForMerchant.mockResolvedValue({
-      success: true,
-      orders: { created: 1, updated: 2, skipped: 0 },
-      items: { totalSynced: 3 },
+function buildSummary(merchant, overrides = {}) {
+  return {
+    success: true,
+    merchantId: merchant.id,
+    shopDomain: merchant.shopDomain,
+    reason: "scheduler:manual",
+    ordersSynced: 3,
+    productsSynced: 4,
+    statusUpdated: 2,
+    orders: {
+      created: 1,
+      updated: 2,
+      skipped: 0,
+      itemsSynced: 3,
       pagesFetched: 1,
-    });
-    mockSyncShopifyProductsForMerchant.mockResolvedValue({
-      success: true,
+    },
+    products: {
       productsSynced: 4,
       variantsSynced: 8,
       pagesSynced: 1,
-      warnings: [],
-    });
+      warningCount: 0,
+    },
+    orderStatuses: { updated: 2, skipped: 0 },
+    ...overrides,
+  };
+}
+
+describe("runShopifySyncScheduler", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSafeCreateAdminAuditLog.mockResolvedValue(null);
+    mockFindActiveMerchantsForSync.mockResolvedValue([merchantA, merchantB]);
+    mockRunShopifySyncForMerchant
+      .mockResolvedValueOnce(buildSummary(merchantA))
+      .mockResolvedValueOnce(buildSummary(merchantB));
   });
 
   it("syncs active merchants sequentially with default options", async () => {
@@ -115,18 +115,23 @@ describe("runShopifySyncScheduler", () => {
       error: null,
     });
 
-    expect(mockSyncShopifyOrdersForMerchant).toHaveBeenCalledTimes(2);
-    expect(mockSyncShopifyProductsForMerchant).toHaveBeenCalledTimes(2);
-    expect(mockSyncShopifyOrdersForMerchant.mock.invocationCallOrder[0]).toBeLessThan(
-      mockSyncShopifyProductsForMerchant.mock.invocationCallOrder[0]
-    );
-    expect(mockSyncShopifyOrdersForMerchant.mock.invocationCallOrder[1]).toBeLessThan(
-      mockSyncShopifyProductsForMerchant.mock.invocationCallOrder[1]
-    );
+    expect(mockRunShopifySyncForMerchant).toHaveBeenCalledTimes(2);
+    expect(mockRunShopifySyncForMerchant).toHaveBeenNthCalledWith(1, {
+      merchantId: "merchant-a",
+      reason: "scheduler:manual",
+    });
+    expect(mockRunShopifySyncForMerchant).toHaveBeenNthCalledWith(2, {
+      merchantId: "merchant-b",
+      reason: "scheduler:manual",
+    });
   });
 
   it("respects cron trigger and merchantLimit", async () => {
-    mockPrisma.merchant.findMany.mockResolvedValue([merchantA]);
+    mockFindActiveMerchantsForSync.mockResolvedValue([merchantA]);
+    mockRunShopifySyncForMerchant.mockReset();
+    mockRunShopifySyncForMerchant.mockResolvedValue(
+      buildSummary(merchantA, { reason: "scheduler:cron" })
+    );
 
     const result = await runShopifySyncScheduler({
       trigger: "cron",
@@ -134,20 +139,30 @@ describe("runShopifySyncScheduler", () => {
     });
 
     expect(result.trigger).toBe("cron");
-    expect(mockPrisma.merchant.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ take: 1 })
-    );
+    expect(mockFindActiveMerchantsForSync).toHaveBeenCalledWith(1);
+    expect(mockRunShopifySyncForMerchant).toHaveBeenCalledWith({
+      merchantId: "merchant-a",
+      reason: "scheduler:cron",
+    });
   });
 
   it("continues when one merchant fails", async () => {
-    mockSyncShopifyOrdersForMerchant
+    mockRunShopifySyncForMerchant.mockReset();
+    mockRunShopifySyncForMerchant
       .mockRejectedValueOnce(new Error("Shopify unavailable"))
-      .mockResolvedValueOnce({
-        success: true,
-        orders: { created: 0, updated: 1, skipped: 0 },
-        items: { totalSynced: 1 },
-        pagesFetched: 1,
-      });
+      .mockResolvedValueOnce(
+        buildSummary(merchantB, {
+          ordersSynced: 1,
+          orders: {
+            created: 0,
+            updated: 1,
+            skipped: 0,
+            itemsSynced: 1,
+            pagesFetched: 1,
+          },
+          orderStatuses: { updated: 1, skipped: 0 },
+        })
+      );
 
     const result = await runShopifySyncScheduler();
 
@@ -164,18 +179,13 @@ describe("runShopifySyncScheduler", () => {
       merchantId: "merchant-b",
       ok: true,
     });
-    expect(mockSyncShopifyProductsForMerchant).toHaveBeenCalledTimes(1);
   });
 
   it("records scheduler audit events", async () => {
-    mockSyncShopifyOrdersForMerchant
+    mockRunShopifySyncForMerchant.mockReset();
+    mockRunShopifySyncForMerchant
       .mockRejectedValueOnce(new Error("Shopify unavailable"))
-      .mockResolvedValueOnce({
-        success: true,
-        orders: { created: 0, updated: 1, skipped: 0 },
-        items: { totalSynced: 1 },
-        pagesFetched: 1,
-      });
+      .mockResolvedValueOnce(buildSummary(merchantB, { reason: "scheduler:cron" }));
 
     await runShopifySyncScheduler({ trigger: "cron", merchantLimit: 2 });
 
@@ -201,21 +211,5 @@ describe("runShopifySyncScheduler", () => {
         eventType: "SHOPIFY_SYNC_SCHEDULER_FINISHED",
       })
     );
-  });
-
-  it("filters merchants missing shop domain or token", async () => {
-    mockPrisma.merchant.findMany.mockResolvedValue([
-      {
-        id: "merchant-empty",
-        shopDomain: "  ",
-        shopifyAccessToken: "token",
-      },
-      merchantA,
-    ]);
-
-    const result = await runShopifySyncScheduler();
-
-    expect(result.merchantCount).toBe(1);
-    expect(result.results[0].merchantId).toBe("merchant-a");
   });
 });

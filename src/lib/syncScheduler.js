@@ -5,12 +5,10 @@ import {
   safeCreateAdminAuditLog,
 } from "@/lib/adminAudit";
 import { AUDIT_ACTORS, AUDIT_EVENTS, logAuditInfo, sanitizeAuditMetadata } from "@/lib/audit";
-import { prisma } from "@/lib/prisma";
-import { syncShopifyProductsForMerchant } from "@/lib/shopifyProductSync";
 import {
-  summarizeOrderStatusSyncFromOrders,
-  syncShopifyOrdersForMerchant,
-} from "@/lib/syncShopifyOrders";
+  findActiveMerchantsForSync,
+  runShopifySyncForMerchant,
+} from "@/lib/shopifySyncRunner";
 
 const DEFAULT_MERCHANT_LIMIT = 10;
 const MAX_MERCHANT_LIMIT = 25;
@@ -42,74 +40,6 @@ function safeErrorMessage(error) {
   }
 
   return "Shopify sync scheduler merchant failure";
-}
-
-function summarizeOrdersResult(orderSyncResult) {
-  if (!orderSyncResult) {
-    return null;
-  }
-
-  return {
-    created: orderSyncResult.orders?.created ?? 0,
-    updated: orderSyncResult.orders?.updated ?? 0,
-    skipped: orderSyncResult.orders?.skipped ?? 0,
-    itemsSynced: orderSyncResult.items?.totalSynced ?? 0,
-    pagesFetched: orderSyncResult.pagesFetched ?? 0,
-  };
-}
-
-function summarizeProductsResult(productSyncResult) {
-  if (!productSyncResult) {
-    return null;
-  }
-
-  return {
-    productsSynced: productSyncResult.productsSynced ?? 0,
-    variantsSynced: productSyncResult.variantsSynced ?? 0,
-    pagesSynced: productSyncResult.pagesSynced ?? 0,
-    warningCount: productSyncResult.warnings?.length ?? 0,
-  };
-}
-
-async function findActiveMerchantsForSync(limit) {
-  const merchants = await prisma.merchant.findMany({
-    where: {
-      isActive: true,
-      shopDomain: { not: null },
-      shopifyAccessToken: { not: null },
-    },
-    select: {
-      id: true,
-      shopDomain: true,
-      shopifyAccessToken: true,
-    },
-    orderBy: { updatedAt: "asc" },
-    take: limit,
-  });
-
-  return merchants.filter(
-    (merchant) =>
-      typeof merchant.shopDomain === "string" &&
-      merchant.shopDomain.trim() !== "" &&
-      typeof merchant.shopifyAccessToken === "string" &&
-      merchant.shopifyAccessToken.trim() !== ""
-  );
-}
-
-async function syncShopifyDataForMerchant(merchant) {
-  const orders = await syncShopifyOrdersForMerchant(merchant);
-
-  const products = await syncShopifyProductsForMerchant({
-    id: merchant.id,
-    shopDomain: merchant.shopDomain,
-    accessToken: merchant.shopifyAccessToken,
-  });
-
-  return {
-    orders: summarizeOrdersResult(orders),
-    products: summarizeProductsResult(products),
-    orderStatuses: summarizeOrderStatusSyncFromOrders(orders),
-  };
 }
 
 async function logSchedulerStarted(trigger, merchantLimit) {
@@ -222,12 +152,15 @@ export async function runShopifySyncScheduler(options = {}) {
 
   for (const merchant of merchants) {
     try {
-      const summary = await syncShopifyDataForMerchant(merchant);
+      const summary = await runShopifySyncForMerchant({
+        merchantId: merchant.id,
+        reason: `scheduler:${trigger}`,
+      });
 
       results.push({
-        merchantId: merchant.id,
-        shopDomain: merchant.shopDomain,
-        ok: true,
+        merchantId: summary.merchantId,
+        shopDomain: summary.shopDomain,
+        ok: summary.success,
         orders: summary.orders,
         products: summary.products,
         orderStatuses: summary.orderStatuses,
