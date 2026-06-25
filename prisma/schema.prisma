@@ -44,6 +44,8 @@ model Merchant {
   @@index([shopDomain])
   @@index([planTier])
   @@index([isActive])
+  @@index([isActive, shopDomain], map: "idx_merchant_active_shop_domain")
+  @@index([isActive, updatedAt], map: "idx_merchant_active_updated_at")
 }
 
 model MerchantUser {
@@ -68,27 +70,27 @@ model MerchantUser {
 }
 
 model CustomerOrder {
-  id             String          @id @default(cuid())
-  merchantId     String
-  orderNumber    String
-  customerEmail  String
-  customerName   String
-  totalAmount    Decimal         @db.Decimal(10, 2)
+  id                String          @id @default(cuid())
+  merchantId        String
+  orderNumber       String
+  customerEmail     String
+  customerName      String
+  totalAmount       Decimal         @db.Decimal(10, 2)
   status            OrderStatus     @default(PENDING)
   financialStatus   String?
   fulfillmentStatus String?
   cancelledAt       DateTime?
   deliveredAt       DateTime?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  currency       String          @default("USD")
-  customerPhone  String?
-  orderedAt      DateTime        @default(now())
-  shippingAmount Decimal?        @db.Decimal(10, 2)
-  shopifyOrderId String?
-  merchant       Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  items          OrderItem[]
-  returnRequests ReturnRequest[]
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  currency          String          @default("USD")
+  customerPhone     String?
+  orderedAt         DateTime        @default(now())
+  shippingAmount    Decimal?        @db.Decimal(10, 2)
+  shopifyOrderId    String?
+  merchant          Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  items             OrderItem[]
+  returnRequests    ReturnRequest[]
 
   @@unique([merchantId, orderNumber])
   @@unique([merchantId, shopifyOrderId])
@@ -143,6 +145,9 @@ model ReturnRequest {
   @@index([customerEmail])
   @@index([status])
   @@index([eligibilityStatus])
+  @@index([merchantId, submittedAt], map: "idx_return_request_merchant_submitted")
+  @@index([merchantId, status, submittedAt], map: "idx_return_request_merchant_status_submitted")
+  @@index([customerEmail, submittedAt], map: "idx_return_request_email_submitted")
 }
 
 model ReturnItem {
@@ -191,6 +196,7 @@ model ReturnEvent {
   @@index([actorUserId])
   @@index([eventType])
   @@index([createdAt])
+  @@index([returnRequestId, createdAt], map: "idx_return_event_request_created")
 }
 
 model AdminAuditLog {
@@ -215,6 +221,9 @@ model AdminAuditLog {
   @@index([severity])
   @@index([createdAt])
   @@index([resourceType, resourceId])
+  @@index([merchantId, createdAt], map: "idx_admin_audit_merchant_created")
+  @@index([merchantId, eventType, createdAt], map: "idx_admin_audit_merchant_event_created")
+  @@index([actorUserId, createdAt], map: "idx_admin_audit_actor_created")
 }
 
 model ShopifyProduct {
