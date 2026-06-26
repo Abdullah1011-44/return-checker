@@ -106,7 +106,7 @@ export async function listReturnRequestsForMerchant(merchant, prismaClient) {
 export async function findReturnRequestForMerchant(
   merchant,
   returnRequestId,
-  prismaClient
+  prismaClient,
 ) {
   const where = buildScopedReturnRequestWhere(merchant, returnRequestId);
 

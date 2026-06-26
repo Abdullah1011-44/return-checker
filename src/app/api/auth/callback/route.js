@@ -21,7 +21,11 @@ import {
 } from "@/lib/shopifyOAuth";
 import { registerShopifyWebhooks } from "@/lib/shopifyWebhooks";
 
-async function registerWebhooksAfterInstall({ merchant, shopDomain, accessToken }) {
+async function registerWebhooksAfterInstall({
+  merchant,
+  shopDomain,
+  accessToken,
+}) {
   let webhookResult = {
     success: false,
     registered: [],
@@ -52,7 +56,7 @@ async function registerWebhooksAfterInstall({ merchant, shopDomain, accessToken 
         registeredCount: webhookResult.registered.length,
         skippedCount: webhookResult.skipped.length,
         failedCount: webhookResult.failed.length,
-      }
+      },
     );
   }
 
@@ -114,7 +118,7 @@ export async function GET(request) {
           message:
             "Missing required OAuth parameters (shop, code, state, or hmac).",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -122,7 +126,7 @@ export async function GET(request) {
     if (!shopCheck.valid) {
       return NextResponse.json(
         { success: false, message: shopCheck.error },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -135,14 +139,14 @@ export async function GET(request) {
           success: false,
           message: "OAuth session expired. Please install the app again.",
         },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
     if (storedState !== state) {
       return NextResponse.json(
         { success: false, message: "Invalid OAuth state. Please try again." },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -160,20 +164,20 @@ export async function GET(request) {
           message: hmacCheck.error,
           ...(isDev && hmacCheck.debug ? { debug: hmacCheck.debug } : {}),
         },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
     const { accessToken, scope } = await exchangeAuthorizationCode(
       shopCheck.shop,
-      code
+      code,
     );
 
     const merchant = await upsertMerchantFromOAuth(
       prisma,
       shopCheck.shop,
       accessToken,
-      scope
+      scope,
     );
 
     await registerWebhooksAfterInstall({
@@ -207,7 +211,7 @@ export async function GET(request) {
       }
       return NextResponse.json(
         { success: false, message: "Server configuration error" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -216,7 +220,7 @@ export async function GET(request) {
         success: false,
         message: "Shopify installation failed. Please try again.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

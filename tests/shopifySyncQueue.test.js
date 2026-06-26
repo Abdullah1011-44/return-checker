@@ -9,9 +9,9 @@ vi.mock("@/lib/inngest", () => ({
 }));
 
 import {
-  SHOPIFY_SYNC_REQUESTED_EVENT,
   buildShopifySyncEventData,
   queueShopifySyncForMerchant,
+  SHOPIFY_SYNC_REQUESTED_EVENT,
 } from "@/lib/shopifySyncQueue";
 
 describe("shopifySyncQueue", () => {

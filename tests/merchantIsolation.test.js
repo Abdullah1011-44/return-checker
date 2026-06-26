@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { findCustomerOrderForReturn } from "@/lib/orderLookup";
-import { mockPrisma } from "./helpers/mockPrisma.js";
 import {
   buildScopedReturnRequestWhere,
   createMockMerchantA,
@@ -9,6 +8,7 @@ import {
   findReturnRequestForMerchant,
   listReturnRequestsForMerchant,
 } from "./helpers/mockMerchant.js";
+import { mockPrisma } from "./helpers/mockPrisma.js";
 
 describe("merchant isolation", () => {
   const merchantA = createMockMerchantA();
@@ -27,31 +27,31 @@ describe("merchant isolation", () => {
     mockPrisma.returnRequest.findMany.mockImplementation(({ where }) =>
       Promise.resolve(
         [returnRequestA, returnRequestB].filter(
-          (request) => request.merchantId === where.merchantId
-        )
-      )
+          (request) => request.merchantId === where.merchantId,
+        ),
+      ),
     );
 
     mockPrisma.returnRequest.findFirst.mockImplementation(({ where }) =>
       Promise.resolve(
         [returnRequestA, returnRequestB].find(
           (request) =>
-            request.id === where.id && request.merchantId === where.merchantId
-        ) ?? null
-      )
+            request.id === where.id && request.merchantId === where.merchantId,
+        ) ?? null,
+      ),
     );
   });
 
   it("Merchant A can access only Merchant A return requests", async () => {
     const { requests } = await listReturnRequestsForMerchant(
       merchantA,
-      mockPrisma
+      mockPrisma,
     );
 
     expect(requests).toEqual([returnRequestA]);
-    expect(requests.every((request) => request.merchantId === merchantA.id)).toBe(
-      true
-    );
+    expect(
+      requests.every((request) => request.merchantId === merchantA.id),
+    ).toBe(true);
     expect(mockPrisma.returnRequest.findMany).toHaveBeenCalledWith({
       where: { merchantId: merchantA.id },
     });
@@ -61,7 +61,7 @@ describe("merchant isolation", () => {
     const { request } = await findReturnRequestForMerchant(
       merchantA,
       returnRequestB.id,
-      mockPrisma
+      mockPrisma,
     );
 
     expect(request).toBeNull();
@@ -92,7 +92,7 @@ describe("merchant isolation", () => {
         where: expect.objectContaining({
           merchantId: merchantA.id,
         }),
-      })
+      }),
     );
   });
 
@@ -110,7 +110,7 @@ describe("merchant isolation", () => {
     const findResult = await findReturnRequestForMerchant(
       null,
       returnRequestA.id,
-      mockPrisma
+      mockPrisma,
     );
     expect(findResult).toEqual({
       error: "MERCHANT_REQUIRED",

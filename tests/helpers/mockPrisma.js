@@ -35,6 +35,7 @@ export function createMockPrisma() {
     returnItem: createModelMock(),
     returnEvent: createModelMock(),
     adminAuditLog: createModelMock(),
+    merchantSettings: createModelMock(),
     shopifyProduct: createModelMock(),
     $connect: vi.fn(),
     $disconnect: vi.fn(),

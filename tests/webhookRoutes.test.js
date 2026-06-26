@@ -12,9 +12,9 @@ vi.mock("@/lib/shopifyComplianceWebhook", () => ({
   logWebhookInvalidHmac: (...args) => mockLogWebhookInvalidHmac(...args),
 }));
 
+import { POST as fulfillmentsCreatePost } from "@/app/api/webhooks/fulfillments-create/route";
 import { POST as ordersCreatePost } from "@/app/api/webhooks/orders-create/route";
 import { POST as ordersUpdatedPost } from "@/app/api/webhooks/orders-updated/route";
-import { POST as fulfillmentsCreatePost } from "@/app/api/webhooks/fulfillments-create/route";
 import { POST as productsUpdatePost } from "@/app/api/webhooks/products-update/route";
 
 const WEBHOOK_SECRET = "test-webhook-secret";
@@ -90,7 +90,10 @@ const WEBHOOK_ROUTES = [
 ];
 
 function signWebhookBody(body, secret = WEBHOOK_SECRET) {
-  return crypto.createHmac("sha256", secret).update(body, "utf8").digest("base64");
+  return crypto
+    .createHmac("sha256", secret)
+    .update(body, "utf8")
+    .digest("base64");
 }
 
 function createWebhookRequest(path, body, options = {}) {
@@ -140,24 +143,24 @@ describe("Shopify webhook routes — shared security", () => {
       const response = await post(
         createWebhookRequest(path, validBody, {
           hmac: signWebhookBody("different-body"),
-        })
+        }),
       );
 
       expect(response.status).toBe(401);
       expect(await response.json()).toEqual({ error: "Unauthorized" });
-    }
+    },
   );
 
   it.each(WEBHOOK_ROUTES)(
     "$name rejects missing HMAC with 401",
     async ({ path, post, validBody }) => {
       const response = await post(
-        createWebhookRequest(path, validBody, { includeHmac: false })
+        createWebhookRequest(path, validBody, { includeHmac: false }),
       );
 
       expect(response.status).toBe(401);
       expect(await response.json()).toEqual({ error: "Unauthorized" });
-    }
+    },
   );
 
   it.each(WEBHOOK_ROUTES)(
@@ -169,7 +172,7 @@ describe("Shopify webhook routes — shared security", () => {
 
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ success: true, ignored: true });
-    }
+    },
   );
 
   it.each(WEBHOOK_ROUTES)(
@@ -179,12 +182,12 @@ describe("Shopify webhook routes — shared security", () => {
       const response = await post(
         createWebhookRequest(path, invalidBody, {
           hmac: signWebhookBody(invalidBody),
-        })
+        }),
       );
 
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ success: false });
-    }
+    },
   );
 
   it.each(WEBHOOK_ROUTES)(
@@ -193,12 +196,12 @@ describe("Shopify webhook routes — shared security", () => {
       const response = await post(
         createWebhookRequest(path, `${validBody} `, {
           hmac: signWebhookBody(validBody),
-        })
+        }),
       );
 
       expect(response.status).toBe(401);
       expect(await response.json()).toEqual({ error: "Unauthorized" });
-    }
+    },
   );
 });
 
@@ -231,7 +234,7 @@ describe("orders-create webhook", () => {
 
     const first = await ordersCreatePost(request);
     const second = await ordersCreatePost(
-      createWebhookRequest("/api/webhooks/orders-create", body)
+      createWebhookRequest("/api/webhooks/orders-create", body),
     );
 
     expect(first.status).toBe(200);
@@ -255,13 +258,13 @@ describe("orders-create webhook", () => {
     await ordersCreatePost(
       createWebhookRequest(
         "/api/webhooks/orders-create",
-        WEBHOOK_ROUTES[0].validBody
-      )
+        WEBHOOK_ROUTES[0].validBody,
+      ),
     );
 
     const createArgs = mockPrisma.customerOrder.create.mock.calls[0][0];
     expect(createArgs.data.customerEmail).toBe(
-      "shopify-order-5001@placeholder.returnradar.local"
+      "shopify-order-5001@placeholder.returnradar.local",
     );
     expect(createArgs.data.customerEmail).not.toBe("secret@example.com");
     expect(createArgs.data.customerName).toBe("Shopify Customer");
@@ -299,8 +302,8 @@ describe("orders-updated webhook", () => {
     const response = await ordersUpdatedPost(
       createWebhookRequest(
         "/api/webhooks/orders-updated",
-        WEBHOOK_ROUTES[1].validBody
-      )
+        WEBHOOK_ROUTES[1].validBody,
+      ),
     );
 
     expect(response.status).toBe(200);
@@ -347,8 +350,8 @@ describe("fulfillments-create webhook", () => {
     const deliveredResponse = await fulfillmentsCreatePost(
       createWebhookRequest(
         "/api/webhooks/fulfillments-create",
-        WEBHOOK_ROUTES[2].validBody
-      )
+        WEBHOOK_ROUTES[2].validBody,
+      ),
     );
 
     expect(deliveredResponse.status).toBe(200);
@@ -370,7 +373,7 @@ describe("fulfillments-create webhook", () => {
     });
 
     await fulfillmentsCreatePost(
-      createWebhookRequest("/api/webhooks/fulfillments-create", inTransitBody)
+      createWebhookRequest("/api/webhooks/fulfillments-create", inTransitBody),
     );
 
     expect(mockPrisma.customerOrder.update).toHaveBeenCalledWith({
@@ -386,8 +389,8 @@ describe("fulfillments-create webhook", () => {
     await fulfillmentsCreatePost(
       createWebhookRequest(
         "/api/webhooks/fulfillments-create",
-        WEBHOOK_ROUTES[2].validBody
-      )
+        WEBHOOK_ROUTES[2].validBody,
+      ),
     );
 
     expect(mockPrisma.customerOrder.findUnique).toHaveBeenCalledWith({
@@ -426,8 +429,8 @@ describe("products-update webhook", () => {
     const updateResponse = await productsUpdatePost(
       createWebhookRequest(
         "/api/webhooks/products-update",
-        WEBHOOK_ROUTES[3].validBody
-      )
+        WEBHOOK_ROUTES[3].validBody,
+      ),
     );
 
     expect(updateResponse.status).toBe(200);
@@ -449,12 +452,15 @@ describe("products-update webhook", () => {
     const ignoredResponse = await productsUpdatePost(
       createWebhookRequest(
         "/api/webhooks/products-update",
-        WEBHOOK_ROUTES[3].validBody
-      )
+        WEBHOOK_ROUTES[3].validBody,
+      ),
     );
 
     expect(ignoredResponse.status).toBe(200);
-    expect(await ignoredResponse.json()).toEqual({ success: true, ignored: true });
+    expect(await ignoredResponse.json()).toEqual({
+      success: true,
+      ignored: true,
+    });
     expect(mockPrisma.shopifyProduct.update).toHaveBeenCalledTimes(1);
     expect(mockPrisma.shopifyProduct.create).not.toHaveBeenCalled();
   });
@@ -463,8 +469,8 @@ describe("products-update webhook", () => {
     await productsUpdatePost(
       createWebhookRequest(
         "/api/webhooks/products-update",
-        WEBHOOK_ROUTES[3].validBody
-      )
+        WEBHOOK_ROUTES[3].validBody,
+      ),
     );
 
     const updateArgs = mockPrisma.shopifyProduct.update.mock.calls[0][0];

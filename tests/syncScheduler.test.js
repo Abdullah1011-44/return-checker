@@ -6,11 +6,13 @@ const mockSafeCreateAdminAuditLog = vi.fn();
 const mockLogAuditInfo = vi.fn();
 
 vi.mock("@/lib/shopifySyncRunner", () => ({
-  findActiveMerchantsForSync: (...args) => mockFindActiveMerchantsForSync(...args),
+  findActiveMerchantsForSync: (...args) =>
+    mockFindActiveMerchantsForSync(...args),
 }));
 
 vi.mock("@/lib/shopifySyncQueue", () => ({
-  queueShopifySyncForMerchant: (...args) => mockQueueShopifySyncForMerchant(...args),
+  queueShopifySyncForMerchant: (...args) =>
+    mockQueueShopifySyncForMerchant(...args),
 }));
 
 vi.mock("@/lib/adminAudit", () => ({

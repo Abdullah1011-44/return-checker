@@ -80,7 +80,7 @@ describe("orders-updated webhook route", () => {
       new Request("http://localhost/api/webhooks/orders-updated", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(401);
@@ -94,7 +94,7 @@ describe("orders-updated webhook route", () => {
       new Request("http://localhost/api/webhooks/orders-updated", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -103,7 +103,7 @@ describe("orders-updated webhook route", () => {
     expect(mockCreateWebhookAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "ORDER_UPDATED_WEBHOOK_IGNORED",
-      })
+      }),
     );
   });
 
@@ -112,7 +112,7 @@ describe("orders-updated webhook route", () => {
       new Request("http://localhost/api/webhooks/orders-updated", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -135,7 +135,7 @@ describe("orders-updated webhook route", () => {
           status: "FULFILLED",
           source: "shopify_webhook",
         },
-      })
+      }),
     );
   });
 
@@ -159,7 +159,7 @@ describe("orders-updated webhook route", () => {
       new Request("http://localhost/api/webhooks/orders-updated", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(200);

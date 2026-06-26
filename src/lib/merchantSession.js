@@ -13,7 +13,7 @@ function getSessionSecret() {
 
   if (!secret) {
     throw new Error(
-      "Missing session secret. Set MERCHANT_SESSION_SECRET or SHOPIFY_API_SECRET."
+      "Missing session secret. Set MERCHANT_SESSION_SECRET or SHOPIFY_API_SECRET.",
     );
   }
 

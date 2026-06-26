@@ -2,7 +2,7 @@ import { optionalEnv } from "@/lib/env";
 
 export const SHOPIFY_ADMIN_API_VERSION = optionalEnv(
   "SHOPIFY_ADMIN_API_VERSION",
-  "2026-04"
+  "2026-04",
 );
 
 const MAX_RATE_LIMIT_RETRIES = 3;
@@ -39,7 +39,7 @@ export async function shopifyAdminRequest(
   shopDomain,
   accessToken,
   endpoint,
-  options = {}
+  options = {},
 ) {
   if (!shopDomain || !accessToken) {
     throw new Error("Shopify Admin API request failed");
@@ -77,7 +77,7 @@ export async function shopifyAdminRequest(
 
     if (response.status === 429 && attempt < MAX_RATE_LIMIT_RETRIES) {
       const retryAfterMs = parseRetryAfterMs(
-        response.headers.get("Retry-After")
+        response.headers.get("Retry-After"),
       );
       await sleep(retryAfterMs);
       attempt += 1;
@@ -157,7 +157,9 @@ export function parseShopifyNextEndpoint(linkHeader) {
     const nextUrl = new URL(match[1]);
     const apiPrefix = `/admin/api/${SHOPIFY_ADMIN_API_VERSION}`;
     const pathAfterVersion = nextUrl.pathname.includes(apiPrefix)
-      ? nextUrl.pathname.slice(nextUrl.pathname.indexOf(apiPrefix) + apiPrefix.length)
+      ? nextUrl.pathname.slice(
+          nextUrl.pathname.indexOf(apiPrefix) + apiPrefix.length,
+        )
       : nextUrl.pathname;
 
     return `${pathAfterVersion}${nextUrl.search}`;
@@ -242,7 +244,7 @@ export async function shopifyAdminGraphqlRequest({
     const error = new Error(
       safeSnippet
         ? `Shopify GraphQL request failed with HTTP ${response.status}: ${safeSnippet}`
-        : `Shopify GraphQL request failed with HTTP ${response.status}`
+        : `Shopify GraphQL request failed with HTTP ${response.status}`,
     );
     error.status = response.status;
     error.code = "SHOPIFY_GRAPHQL_HTTP_ERROR";
@@ -275,7 +277,7 @@ export async function shopifyAdminGraphqlRequest({
     });
 
     const error = new Error(
-      messages || "Shopify GraphQL request returned errors"
+      messages || "Shopify GraphQL request returned errors",
     );
     error.code = "SHOPIFY_GRAPHQL_ERRORS";
     error.graphqlErrors = payload.errors;

@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
-import {
-  AUDIT_ACTORS,
-  AUDIT_EVENTS,
-  safeCreateAuditEvent,
-} from "@/lib/audit";
+import { logUnauthorizedApiAccess } from "@/lib/adminAudit";
+import { AUDIT_ACTORS, AUDIT_EVENTS, safeCreateAuditEvent } from "@/lib/audit";
+import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
 import { sendEmail } from "@/lib/email";
 import { buildReturnStatusEmail } from "@/lib/emailTemplates";
-import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
-import { logUnauthorizedApiAccess } from "@/lib/adminAudit";
 import {
   createApiErrorResponse,
   handleApiError,
@@ -15,8 +11,8 @@ import {
 } from "@/lib/errors";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { prisma } from "@/lib/prisma";
-import { captureException } from "@/lib/sentry";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { captureException } from "@/lib/sentry";
 import {
   merchantActionBodySchema,
   parseJsonBody,
@@ -95,8 +91,7 @@ async function sendReturnActionEmail({
     returnRequest?.customerEmail?.trim() ||
     null;
 
-  const orderNumber =
-    returnRequest?.order?.orderNumber || "Unknown";
+  const orderNumber = returnRequest?.order?.orderNumber || "Unknown";
 
   if (!customerEmail) {
     return {
@@ -152,9 +147,7 @@ async function logEmailAuditEvent({ returnRequestId, action, emailResult }) {
       provider: "resend",
       action,
       recipientType: "customer",
-      ...(sent
-        ? {}
-        : { reason: emailResult.error ?? "EMAIL_SEND_FAILED" }),
+      ...(sent ? {} : { reason: emailResult.error ?? "EMAIL_SEND_FAILED" }),
     },
   });
 }
@@ -218,7 +211,7 @@ export async function PATCH(request, { params }) {
       return createApiErrorResponse(
         "Return request not found",
         404,
-        "RETURN_REQUEST_NOT_FOUND"
+        "RETURN_REQUEST_NOT_FOUND",
       );
     }
 

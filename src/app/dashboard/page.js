@@ -62,7 +62,8 @@ function getPrismaStatus(request) {
 
 function countForFilter(requests, filter) {
   if (!filter.statuses) return requests.length;
-  return requests.filter((r) => filter.statuses.includes(getPrismaStatus(r))).length;
+  return requests.filter((r) => filter.statuses.includes(getPrismaStatus(r)))
+    .length;
 }
 
 function matchesFilter(request, filter) {
@@ -145,27 +146,27 @@ function sortRequests(requests, sortId) {
 // ── Risk-level colour maps ────────────────────────────────────────
 const riskConfig = {
   Low: {
-    accentBar:  "bg-emerald-500",
-    avatarBg:   "bg-emerald-50",
+    accentBar: "bg-emerald-500",
+    avatarBg: "bg-emerald-50",
     avatarText: "text-emerald-700",
-    scoreBar:   "bg-emerald-500",
-    riskText:   "text-emerald-700",
+    scoreBar: "bg-emerald-500",
+    riskText: "text-emerald-700",
     confidence: "High confidence",
   },
   Medium: {
-    accentBar:  "bg-amber-500",
-    avatarBg:   "bg-amber-50",
+    accentBar: "bg-amber-500",
+    avatarBg: "bg-amber-50",
     avatarText: "text-amber-700",
-    scoreBar:   "bg-amber-500",
-    riskText:   "text-amber-700",
+    scoreBar: "bg-amber-500",
+    riskText: "text-amber-700",
     confidence: "Moderate confidence",
   },
   High: {
-    accentBar:  "bg-red-500",
-    avatarBg:   "bg-red-50",
+    accentBar: "bg-red-500",
+    avatarBg: "bg-red-50",
     avatarText: "text-red-700",
-    scoreBar:   "bg-red-500",
-    riskText:   "text-red-700",
+    scoreBar: "bg-red-500",
+    riskText: "text-red-700",
     confidence: "Low confidence",
   },
 };
@@ -217,17 +218,15 @@ export default function Dashboard() {
 
   const filteredRequests = useMemo(
     () => safeRequests.filter((r) => matchesFilter(r, activeFilterDef)),
-    [safeRequests, activeFilterDef]
+    [safeRequests, activeFilterDef],
   );
 
   const displayRequests = useMemo(
     () => sortRequests(filteredRequests, sortOption),
-    [filteredRequests, sortOption]
+    [filteredRequests, sortOption],
   );
 
   const loadRequests = useCallback(async () => {
-    
-
     loadAbortRef.current?.abort();
     const controller = new AbortController();
     loadAbortRef.current = controller;
@@ -241,14 +240,12 @@ export default function Dashboard() {
 
     try {
       const result = await fetchDashboardRequests(controller.signal);
-      
 
       if (controller.signal.aborted) {
         return;
       }
 
       if (result.ok) {
-       
         setRequests(result.requests);
         setLoadError("");
       } else {
@@ -263,7 +260,7 @@ export default function Dashboard() {
       setRequests([]);
     } finally {
       clearTimeout(safetyTimer);
-      
+
       setLoading(false);
     }
   }, []);
@@ -293,14 +290,14 @@ export default function Dashboard() {
       if (!res.ok || !data.success) {
         if (res.status === 429) {
           setSyncError(
-            "Too many sync attempts. Please wait a few minutes and try again."
+            "Too many sync attempts. Please wait a few minutes and try again.",
           );
         } else if (data.code === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED") {
           setSyncError(
-            "Shopify connection works, but order sync needs Protected Customer Data access approval."
+            "Shopify connection works, but order sync needs Protected Customer Data access approval.",
           );
           setSyncHelper(
-            "Go to Shopify Partner Dashboard > API access > Protected customer data access. Add read_orders, request approval, then reinstall the app."
+            "Go to Shopify Partner Dashboard > API access > Protected customer data access. Add read_orders, request approval, then reinstall the app.",
           );
         } else {
           setSyncError("Unable to sync Shopify orders");
@@ -310,7 +307,8 @@ export default function Dashboard() {
 
       if (data.queued) {
         setSyncMessage(
-          data.message || "Shopify sync queued. Orders and products will update shortly."
+          data.message ||
+            "Shopify sync queued. Orders and products will update shortly.",
         );
         setSyncSummary(null);
         return;
@@ -357,14 +355,14 @@ export default function Dashboard() {
 
       if (data.queued) {
         setProductSyncMessage(
-          data.message || "Shopify sync queued. Products will update shortly."
+          data.message || "Shopify sync queued. Products will update shortly.",
         );
         setProductSyncWarnings([]);
         return;
       }
 
       setProductSyncMessage(
-        `Synced ${data.productsSynced ?? 0} products and ${data.variantsSynced ?? 0} variants.`
+        `Synced ${data.productsSynced ?? 0} products and ${data.variantsSynced ?? 0} variants.`,
       );
 
       if (Array.isArray(data.warnings) && data.warnings.length > 0) {
@@ -379,7 +377,7 @@ export default function Dashboard() {
 
   function handleRequestUpdated(updatedRequest) {
     setRequests((prev) =>
-      prev.map((r) => (r.id === updatedRequest.id ? updatedRequest : r))
+      prev.map((r) => (r.id === updatedRequest.id ? updatedRequest : r)),
     );
   }
 
@@ -423,8 +421,7 @@ export default function Dashboard() {
 
       await loadRequests();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Update failed.";
+      const message = error instanceof Error ? error.message : "Update failed.";
       setActionErrors((prev) => ({ ...prev, [request.id]: message }));
       throw error;
     } finally {
@@ -441,7 +438,8 @@ export default function Dashboard() {
   }
 
   function handleManualReview(request) {
-    return (merchantNote) => performAction(request, "NEEDS_MORE_INFO", merchantNote);
+    return (merchantNote) =>
+      performAction(request, "NEEDS_MORE_INFO", merchantNote);
   }
 
   function handleResolve(request) {
@@ -458,12 +456,12 @@ export default function Dashboard() {
       className="min-h-screen px-4 py-10"
       style={{
         backgroundColor: "#f8fafc",
-        backgroundImage: "radial-gradient(circle, #cbd5e1 1px, transparent 1px)",
+        backgroundImage:
+          "radial-gradient(circle, #cbd5e1 1px, transparent 1px)",
         backgroundSize: "24px 24px",
       }}
     >
       <div className="max-w-3xl mx-auto">
-
         {/* ── Header ── */}
         <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
           <div>
@@ -508,7 +506,7 @@ export default function Dashboard() {
               {pendingCount} pending
             </span>
             <span className="text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-full px-3 py-1">
-             {attentionCount} needs attention
+              {attentionCount} needs attention
             </span>
           </div>
         </div>
@@ -548,7 +546,9 @@ export default function Dashboard() {
           </div>
         )}
 
-        {(productSyncMessage || productSyncError || productSyncWarnings.length > 0) && (
+        {(productSyncMessage ||
+          productSyncError ||
+          productSyncWarnings.length > 0) && (
           <div className="mb-6 space-y-2">
             {productSyncMessage && (
               <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
@@ -647,47 +647,55 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && !loadError && safeRequests.length > 0 && filteredRequests.length === 0 && (
-          <div className="text-center py-16 text-slate-400">
-            <p className="text-sm font-medium">No requests match this filter.</p>
-            <button
-              type="button"
-              onClick={() => setActiveFilter("ALL")}
-              className="mt-3 text-xs font-semibold text-slate-600 hover:text-slate-900 underline"
-            >
-              Show all requests
-            </button>
-          </div>
-        )}
+        {!loading &&
+          !loadError &&
+          safeRequests.length > 0 &&
+          filteredRequests.length === 0 && (
+            <div className="text-center py-16 text-slate-400">
+              <p className="text-sm font-medium">
+                No requests match this filter.
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveFilter("ALL")}
+                className="mt-3 text-xs font-semibold text-slate-600 hover:text-slate-900 underline"
+              >
+                Show all requests
+              </button>
+            </div>
+          )}
 
         <div className="space-y-4">
           {!loading &&
             !loadError &&
             displayRequests.map((request) => {
-            const risk =
-              riskConfig[request.riskLevel] ?? riskConfig["Medium"];
+              const risk =
+                riskConfig[request.riskLevel] ?? riskConfig["Medium"];
 
-            return (
-              <RequestCard
-                key={request.id}
-                request={request}
-                risk={risk}
-                isUpdating={updatingId === request.id}
-                actionError={actionErrors[request.id] || ""}
-                emailFeedback={actionEmailFeedback[request.id] || ""}
-                onApprove={handleApprove(request)}
-                onReject={handleReject(request)}
-                onManualReview={handleManualReview(request)}
-                onResolve={handleResolve(request)}
-                onNoteChange={handleNoteChange(request)}
-              />
-            );
-          })}
+              return (
+                <RequestCard
+                  key={request.id}
+                  request={request}
+                  risk={risk}
+                  isUpdating={updatingId === request.id}
+                  actionError={actionErrors[request.id] || ""}
+                  emailFeedback={actionEmailFeedback[request.id] || ""}
+                  onApprove={handleApprove(request)}
+                  onReject={handleReject(request)}
+                  onManualReview={handleManualReview(request)}
+                  onResolve={handleResolve(request)}
+                  onNoteChange={handleNoteChange(request)}
+                />
+              );
+            })}
         </div>
 
         <p className="text-center text-xs text-slate-400 mt-8">
           Powered by Return Recovery Copilot ·{" "}
-          <a href="#" className="underline hover:text-slate-600 transition-colors">
+          <a
+            href="#"
+            className="underline hover:text-slate-600 transition-colors"
+          >
             View documentation
           </a>
         </p>

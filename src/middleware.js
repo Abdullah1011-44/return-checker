@@ -10,7 +10,7 @@ export function middleware(request) {
   const { pathname } = request.nextUrl;
 
   const isProtected = PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 
   if (!isProtected) {

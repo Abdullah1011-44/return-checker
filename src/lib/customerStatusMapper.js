@@ -56,7 +56,7 @@ function resolveMerchantDecision(items) {
     ...new Set(
       (items ?? [])
         .map((item) => item.merchantDecision)
-        .filter((d) => d && d !== "PENDING")
+        .filter((d) => d && d !== "PENDING"),
     ),
   ];
 
@@ -79,7 +79,6 @@ export function mapReturnRequestToCustomerStatus(returnRequest) {
   const items = (returnRequest.items ?? []).map((returnItem) => {
     const orderItem = returnItem.orderItem;
     return {
-      
       productName: orderItem?.productName ?? "Item",
       sku: orderItem?.sku ?? "",
       quantity: orderItem?.quantity ?? 1,
@@ -98,11 +97,9 @@ export function mapReturnRequestToCustomerStatus(returnRequest) {
     returnRequest.updatedAt?.toISOString?.() ?? returnRequest.updatedAt;
 
   return {
-   
     orderNumber: returnRequest.order?.orderNumber ?? "",
     email: returnRequest.customerEmail,
-    status:
-      STATUS_TO_CUSTOMER[returnRequest.status] ?? returnRequest.status,
+    status: STATUS_TO_CUSTOMER[returnRequest.status] ?? returnRequest.status,
     submittedAt,
     updatedAt,
     merchantNote: combineMerchantNotes(returnRequest.items),

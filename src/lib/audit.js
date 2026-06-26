@@ -43,6 +43,7 @@ export const AUDIT_EVENTS = {
   FULFILLMENT_CREATED_WEBHOOK: "FULFILLMENT_CREATED_WEBHOOK",
   PRODUCT_UPDATED_WEBHOOK: "PRODUCT_UPDATED_WEBHOOK",
   APP_UNINSTALLED: "APP_UNINSTALLED",
+  MERCHANT_SETTINGS_UPDATED: "MERCHANT_SETTINGS_UPDATED",
   GENERIC_ERROR: "GENERIC_ERROR",
 };
 
@@ -90,7 +91,7 @@ function isDangerousMetadataKey(key) {
   }
 
   return DANGEROUS_KEY_MARKERS.some((marker) =>
-    normalized.includes(marker.toLowerCase())
+    normalized.includes(marker.toLowerCase()),
   );
 }
 
@@ -99,7 +100,7 @@ function sanitizeAuditValue(value) {
     return value.map((item) =>
       item !== null && typeof item === "object"
         ? sanitizeAuditMetadata(item)
-        : item
+        : item,
     );
   }
 
@@ -114,7 +115,11 @@ function sanitizeAuditValue(value) {
  * Strip secrets and sensitive fields from audit metadata before save or log.
  */
 export function sanitizeAuditMetadata(metadata) {
-  if (metadata == null || typeof metadata !== "object" || Array.isArray(metadata)) {
+  if (
+    metadata == null ||
+    typeof metadata !== "object" ||
+    Array.isArray(metadata)
+  ) {
     return {};
   }
 

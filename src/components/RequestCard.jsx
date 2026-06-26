@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import AnalyticsCard from "@/components/AnalyticsCard";
 import OrderStatusBadges from "@/components/OrderStatusBadges";
-import StatusBadge from "@/components/StatusBadge";
 import ProgressBar from "@/components/ProgressBar.jsx";
+import StatusBadge from "@/components/StatusBadge";
 import { getItemRecommendedAction } from "@/lib/returnRequests";
 
 const reasonLabels = {
@@ -127,16 +127,13 @@ export default function RequestCard({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-
       {/* Colour accent bar */}
       <div className={`h-1 w-full ${risk.accentBar}`} />
 
       <div className="p-6">
-
         {/* ── Top row ── */}
         <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
           <div className="flex items-start gap-3">
-
             {/* Avatar */}
             <div
               className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 ${risk.avatarBg} ${risk.avatarText}`}
@@ -148,7 +145,9 @@ export default function RequestCard({
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-0.5">
                 Order #{request.orderNumber}
               </p>
-              <p className="text-sm font-semibold text-slate-800">{request.email}</p>
+              <p className="text-sm font-semibold text-slate-800">
+                {request.email}
+              </p>
               <OrderStatusBadges orderStatus={request.orderStatus} />
               <div className="flex flex-wrap gap-2 mt-2">
                 {selectedItems.length > 0 ? (
@@ -192,7 +191,9 @@ export default function RequestCard({
                   className="bg-slate-50 rounded-xl border border-slate-100 px-4 py-3 space-y-2"
                 >
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">{item.title}</p>
+                    <p className="text-sm font-semibold text-slate-800">
+                      {item.title}
+                    </p>
                     <p className="text-xs text-slate-500 mt-0.5">
                       SKU: {item.sku} · Qty: {item.quantity} · $
                       {Number(item.price).toFixed(2)}
@@ -201,33 +202,47 @@ export default function RequestCard({
 
                   <div className="grid gap-1.5 text-xs text-slate-600 border-t border-slate-200 pt-2">
                     <p>
-                      <span className="font-semibold text-slate-700">Return reason:</span>{" "}
+                      <span className="font-semibold text-slate-700">
+                        Return reason:
+                      </span>{" "}
                       {item.returnReason
-                        ? reasonLabels[item.returnReason] ?? item.returnReason
+                        ? (reasonLabels[item.returnReason] ?? item.returnReason)
                         : "Not provided"}
                     </p>
                     <p>
-                      <span className="font-semibold text-slate-700">Customer note:</span>{" "}
+                      <span className="font-semibold text-slate-700">
+                        Customer note:
+                      </span>{" "}
                       {item.comment || "No comment provided"}
                     </p>
                     <p>
-                      <span className="font-semibold text-slate-700">Preferred resolution:</span>{" "}
+                      <span className="font-semibold text-slate-700">
+                        Preferred resolution:
+                      </span>{" "}
                       {item.selectedOption || "Not provided"}
                     </p>
                     <p>
-                      <span className="font-semibold text-slate-700">AI recommended action:</span>{" "}
+                      <span className="font-semibold text-slate-700">
+                        AI recommended action:
+                      </span>{" "}
                       <span className="inline-flex items-center rounded-full bg-slate-800 text-white px-2 py-0.5 text-[11px] font-semibold">
                         {item.recommendedAction}
                       </span>
                     </p>
                     <p>
-                      <span className="font-semibold text-slate-700">Proof image:</span>{" "}
+                      <span className="font-semibold text-slate-700">
+                        Proof image:
+                      </span>{" "}
                       {item.proofImageName || "No proof uploaded"}
                     </p>
                   </div>
 
                   {item.proofImage && (
-                    <a href={item.proofImage} target="_blank" rel="noopener noreferrer">
+                    <a
+                      href={item.proofImage}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       <img
                         src={item.proofImage}
                         alt={`Proof for ${item.title}`}
@@ -257,7 +272,11 @@ export default function RequestCard({
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">
               Proof Image
             </p>
-            <a href={request.proofImage} target="_blank" rel="noopener noreferrer">
+            <a
+              href={request.proofImage}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <img
                 src={request.proofImage}
                 alt="Customer proof"
@@ -359,7 +378,11 @@ export default function RequestCard({
         <div className="flex gap-2.5 flex-wrap">
           <button
             onClick={handleApprove}
-            disabled={isUpdating || request.status === "Approved" || request.status === "Resolved"}
+            disabled={
+              isUpdating ||
+              request.status === "Approved" ||
+              request.status === "Resolved"
+            }
             className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-700 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-all duration-150"
           >
             {isUpdating ? "Updating…" : "✓ Approve"}
@@ -367,7 +390,11 @@ export default function RequestCard({
 
           <button
             onClick={handleReject}
-            disabled={isUpdating || request.status === "Needs Attention" || request.status === "Resolved"}
+            disabled={
+              isUpdating ||
+              request.status === "Needs Attention" ||
+              request.status === "Resolved"
+            }
             className="inline-flex items-center gap-2 border border-red-200 hover:border-red-300 hover:bg-red-50 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-red-700 text-sm font-semibold px-4 py-2.5 rounded-xl transition-all duration-150"
           >
             {isUpdating ? "Updating…" : "✕ Reject"}
@@ -375,7 +402,11 @@ export default function RequestCard({
 
           <button
             onClick={handleManualReview}
-            disabled={isUpdating || request.status === "Manual Review" || request.status === "Resolved"}
+            disabled={
+              isUpdating ||
+              request.status === "Manual Review" ||
+              request.status === "Resolved"
+            }
             className="inline-flex items-center gap-2 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 text-sm font-semibold px-4 py-2.5 rounded-xl transition-all duration-150"
           >
             {isUpdating ? "Updating…" : "👁 Manual Review"}
@@ -401,7 +432,6 @@ export default function RequestCard({
             )}
           </p>
         )}
-
       </div>
     </div>
   );

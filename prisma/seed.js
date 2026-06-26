@@ -39,7 +39,7 @@ async function seedDemoMerchant() {
   console.log(`Merchant: ${merchant.shopName} (${merchant.email})`);
   for (const order of merchant.orders) {
     console.log(
-      `  Order #${order.orderNumber} · ${order.customerEmail} · ${order.items.length} items`
+      `  Order #${order.orderNumber} · ${order.customerEmail} · ${order.items.length} items`,
     );
   }
 }
@@ -53,10 +53,10 @@ async function seedShopifyMerchantOrders() {
 
   if (!merchant) {
     console.log(
-      `  Skipped — no merchant with shopDomain "${SHOPIFY_SHOP_DOMAIN}".`
+      `  Skipped — no merchant with shopDomain "${SHOPIFY_SHOP_DOMAIN}".`,
     );
     console.log(
-      "  Run Shopify OAuth install first, then: npm run db:seed:shopify"
+      "  Run Shopify OAuth install first, then: npm run db:seed:shopify",
     );
     return;
   }

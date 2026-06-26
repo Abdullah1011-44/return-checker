@@ -1,27 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  mockSetTag,
-  mockWithScope,
-  mockSentryCaptureException,
-} = vi.hoisted(() => {
-  const mockSetTag = vi.fn();
-  const mockSetUser = vi.fn();
-  const mockSetContext = vi.fn();
-  const mockScope = {
-    setTag: mockSetTag,
-    setUser: mockSetUser,
-    setContext: mockSetContext,
-  };
-  const mockWithScope = vi.fn((callback) => callback(mockScope));
-  const mockSentryCaptureException = vi.fn();
+const { mockSetTag, mockWithScope, mockSentryCaptureException } = vi.hoisted(
+  () => {
+    const mockSetTag = vi.fn();
+    const mockSetUser = vi.fn();
+    const mockSetContext = vi.fn();
+    const mockScope = {
+      setTag: mockSetTag,
+      setUser: mockSetUser,
+      setContext: mockSetContext,
+    };
+    const mockWithScope = vi.fn((callback) => callback(mockScope));
+    const mockSentryCaptureException = vi.fn();
 
-  return {
-    mockSetTag,
-    mockWithScope,
-    mockSentryCaptureException,
-  };
-});
+    return {
+      mockSetTag,
+      mockWithScope,
+      mockSentryCaptureException,
+    };
+  },
+);
 
 vi.mock("@sentry/nextjs", () => ({
   withScope: mockWithScope,
@@ -83,7 +81,7 @@ describe("captureException", () => {
         route: testContext.route,
         method: testContext.method,
         action: testContext.action,
-      })
+      }),
     );
     expect(mockWithScope).not.toHaveBeenCalled();
     expect(mockSentryCaptureException).not.toHaveBeenCalled();
@@ -99,18 +97,18 @@ describe("captureException", () => {
     expect(mockWithScope).toHaveBeenCalledOnce();
     expect(mockSetTag).toHaveBeenCalledWith(
       "merchantId",
-      testContext.merchantId
+      testContext.merchantId,
     );
     expect(mockSetTag).toHaveBeenCalledWith(
       "shopDomain",
-      testContext.shopDomain
+      testContext.shopDomain,
     );
     expect(mockSetTag).toHaveBeenCalledWith("route", testContext.route);
     expect(mockSetTag).toHaveBeenCalledWith("method", testContext.method);
     expect(mockSetTag).toHaveBeenCalledWith("action", testContext.action);
     expect(mockSentryCaptureException).toHaveBeenCalledOnce();
     expect(mockSentryCaptureException).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "context test" })
+      expect.objectContaining({ message: "context test" }),
     );
   });
 });

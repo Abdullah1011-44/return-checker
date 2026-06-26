@@ -113,7 +113,7 @@ export async function POST(request) {
       await logWebhookInvalidHmac(
         ROUTE_NAME,
         getShopifyWebhookHeaders(request),
-        request
+        request,
       );
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -176,7 +176,8 @@ export async function POST(request) {
       action: AUDIT_EVENTS.ORDER_UPDATED_WEBHOOK,
       metadata: {
         shopDomain,
-        shopifyOrderId: identifiers.shopifyOrderId ?? existingOrder.shopifyOrderId,
+        shopifyOrderId:
+          identifiers.shopifyOrderId ?? existingOrder.shopifyOrderId,
         orderNumber: identifiers.orderNumber ?? existingOrder.orderNumber,
         status: statusFields.status,
         source: "shopify_webhook",

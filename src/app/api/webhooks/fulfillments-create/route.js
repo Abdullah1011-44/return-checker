@@ -37,7 +37,11 @@ function extractSafeFulfillmentFields(payload) {
 function mapFulfillmentStatusForOrder(fulfillmentStatus) {
   const normalized = String(fulfillmentStatus ?? "").toLowerCase();
 
-  if (normalized === "cancelled" || normalized === "error" || normalized === "failure") {
+  if (
+    normalized === "cancelled" ||
+    normalized === "error" ||
+    normalized === "failure"
+  ) {
     return "unfulfilled";
   }
 
@@ -51,7 +55,8 @@ function mapOrderStatusFromFulfillment({ shipmentStatus, fulfillmentStatus }) {
     return "DELIVERED";
   }
 
-  const mappedFulfillmentStatus = mapFulfillmentStatusForOrder(fulfillmentStatus);
+  const mappedFulfillmentStatus =
+    mapFulfillmentStatusForOrder(fulfillmentStatus);
   if (mappedFulfillmentStatus === "fulfilled") {
     return "FULFILLED";
   }
@@ -62,7 +67,7 @@ function mapOrderStatusFromFulfillment({ shipmentStatus, fulfillmentStatus }) {
 function getFulfillmentOrderUpdateFields(existingOrder, fulfillmentFields) {
   const patch = {};
   const nextFulfillmentStatus = mapFulfillmentStatusForOrder(
-    fulfillmentFields.fulfillmentStatus
+    fulfillmentFields.fulfillmentStatus,
   );
 
   if (existingOrder.fulfillmentStatus !== nextFulfillmentStatus) {
@@ -107,7 +112,7 @@ export async function POST(request) {
       await logWebhookInvalidHmac(
         ROUTE_NAME,
         getShopifyWebhookHeaders(request),
-        request
+        request,
       );
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -140,7 +145,7 @@ export async function POST(request) {
 
     const existingOrder = await findMerchantOrderByShopifyId(
       merchant.id,
-      fulfillmentFields.shopifyOrderId
+      fulfillmentFields.shopifyOrderId,
     );
 
     if (!existingOrder) {
@@ -156,7 +161,7 @@ export async function POST(request) {
 
     const updateFields = getFulfillmentOrderUpdateFields(
       existingOrder,
-      fulfillmentFields
+      fulfillmentFields,
     );
 
     if (updateFields) {
@@ -173,7 +178,7 @@ export async function POST(request) {
         shopDomain,
         shopifyOrderId: fulfillmentFields.shopifyOrderId,
         fulfillmentStatus: mapFulfillmentStatusForOrder(
-          fulfillmentFields.fulfillmentStatus
+          fulfillmentFields.fulfillmentStatus,
         ),
         shipmentStatus: fulfillmentFields.shipmentStatus,
         source: "shopify_webhook",

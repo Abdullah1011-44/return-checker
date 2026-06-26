@@ -10,8 +10,8 @@
  * - Production requests are verified via INNGEST_SIGNING_KEY (SDK default).
  */
 import { serve } from "inngest/next";
-import { syncShopifyData } from "@/lib/inngestFunctions/shopifySync";
 import { inngest } from "@/lib/inngest";
+import { syncShopifyData } from "@/lib/inngestFunctions/shopifySync";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,

@@ -23,10 +23,10 @@ vi.mock("@/lib/shopifyProductSync", () => ({
 }));
 
 import {
-  ShopifySyncRunnerError,
   buildSafeMerchantSyncSummary,
   findActiveMerchantsForSync,
   runShopifySyncForMerchant,
+  ShopifySyncRunnerError,
 } from "@/lib/shopifySyncRunner";
 
 const merchantRecord = {
@@ -114,7 +114,7 @@ describe("shopifySyncRunner", () => {
     });
 
     expect(mockSyncShopifyOrdersForMerchant).toHaveBeenCalledBefore(
-      mockSyncShopifyProductsForMerchant
+      mockSyncShopifyProductsForMerchant,
     );
     expect(mockSyncShopifyProductsForMerchant).toHaveBeenCalledWith({
       id: "merchant-1",
@@ -134,7 +134,7 @@ describe("shopifySyncRunner", () => {
     });
 
     await expect(
-      runShopifySyncForMerchant({ merchantId: "merchant-1" })
+      runShopifySyncForMerchant({ merchantId: "merchant-1" }),
     ).rejects.toMatchObject({
       name: "ShopifySyncRunnerError",
       code: "MERCHANT_INACTIVE",
@@ -148,11 +148,11 @@ describe("shopifySyncRunner", () => {
     mockSyncShopifyOrdersForMerchant.mockRejectedValue(
       Object.assign(new Error("Shopify rate limit"), {
         code: "SHOPIFY_RATE_LIMIT",
-      })
+      }),
     );
 
     await expect(
-      runShopifySyncForMerchant({ merchantId: "merchant-1", reason: "queue" })
+      runShopifySyncForMerchant({ merchantId: "merchant-1", reason: "queue" }),
     ).rejects.toBeInstanceOf(ShopifySyncRunnerError);
 
     expect(mockSyncShopifyProductsForMerchant).not.toHaveBeenCalled();
@@ -181,7 +181,7 @@ describe("shopifySyncRunner", () => {
     expect(mockPrisma.merchant.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         select: { id: true, shopDomain: true },
-      })
+      }),
     );
   });
 

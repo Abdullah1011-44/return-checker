@@ -9,7 +9,7 @@ const { pathToFileURL } = require("node:url");
 
 async function main() {
   const mapperUrl = pathToFileURL(
-    path.join(__dirname, "../src/lib/orderStatusMapper.js")
+    path.join(__dirname, "../src/lib/orderStatusMapper.js"),
   ).href;
   const { mapShopifyOrderStatus } = await import(mapperUrl);
 

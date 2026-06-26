@@ -9,25 +9,25 @@ datasource db {
 }
 
 model Merchant {
-  id                   String           @id @default(cuid())
+  id                   String            @id @default(cuid())
   shopName             String
-  email                String           @unique
-  role                 UserRole         @default(MERCHANT)
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
-  allowExchange        Boolean          @default(true)
-  allowKeepItem        Boolean          @default(false)
-  allowPartialRefund   Boolean          @default(true)
-  allowStoreCredit     Boolean          @default(true)
-  currency             String           @default("AUD")
-  freeExchangeShipping Boolean          @default(false)
-  isActive             Boolean          @default(true)
-  maxPartialRefundPct  Int              @default(40)
-  maxStoreCreditBonus  Int              @default(15)
+  email                String            @unique
+  role                 UserRole          @default(MERCHANT)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  allowExchange        Boolean           @default(true)
+  allowKeepItem        Boolean           @default(false)
+  allowPartialRefund   Boolean           @default(true)
+  allowStoreCredit     Boolean           @default(true)
+  currency             String            @default("AUD")
+  freeExchangeShipping Boolean           @default(false)
+  isActive             Boolean           @default(true)
+  maxPartialRefundPct  Int               @default(40)
+  maxStoreCreditBonus  Int               @default(15)
   onboardedAt          DateTime?
-  planTier             PlanTier         @default(FREE)
-  returnWindowDays     Int              @default(30)
-  shopDomain           String?          @unique
+  planTier             PlanTier          @default(FREE)
+  returnWindowDays     Int               @default(30)
+  shopDomain           String?           @unique
   shopLogoUrl          String?
   shopifyAccessToken   String?
   shopifyInstalledAt   DateTime?
@@ -40,6 +40,7 @@ model Merchant {
   returnRequests       ReturnRequest[]
   adminAuditLogs       AdminAuditLog[]
   shopifyProducts      ShopifyProduct[]
+  settings             MerchantSettings?
 
   @@index([shopDomain])
   @@index([planTier])
@@ -67,6 +68,26 @@ model MerchantUser {
   @@index([merchantId])
   @@index([clerkId])
   @@index([email])
+}
+
+model MerchantSettings {
+  id                   String    @id @default(cuid())
+  merchantId           String    @unique
+  notifyEmail          String?
+  returnWindow         Int       @default(30)
+  autoRejectDays       Int?
+  aiConfidence         Float     @default(0.7)
+  storeType            StoreType @default(GENERAL)
+  allowExchange        Boolean   @default(true)
+  allowKeepItem        Boolean   @default(false)
+  allowPartialRefund   Boolean   @default(true)
+  allowStoreCredit     Boolean   @default(true)
+  freeExchangeShipping Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  merchant             Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
 }
 
 model CustomerOrder {
@@ -351,4 +372,14 @@ enum PlanTier {
   STARTER
   GROWTH
   SCALE
+}
+
+enum StoreType {
+  GENERAL
+  FASHION
+  ELECTRONICS
+  BEAUTY
+  HOME
+  FOOD
+  OTHER
 }

@@ -20,7 +20,9 @@ function escapeHtml(value) {
 }
 
 function formatOrderNumber(orderNumber) {
-  const raw = String(orderNumber ?? "").replace(/^#/, "").trim();
+  const raw = String(orderNumber ?? "")
+    .replace(/^#/, "")
+    .trim();
   return raw || "your order";
 }
 
@@ -50,8 +52,7 @@ function formatItemsList(items) {
     .map((item) => {
       const title = item?.title || item?.productName || "Item";
       const sku = item?.sku ? ` (SKU: ${item.sku})` : "";
-      const qty =
-        item?.quantity != null ? ` — Qty: ${item.quantity}` : "";
+      const qty = item?.quantity != null ? ` — Qty: ${item.quantity}` : "";
       return `- ${title}${sku}${qty}`;
     })
     .join("\n");
@@ -94,8 +95,7 @@ export function buildReturnStatusEmail({
   const safeAction = ACTION_MESSAGES[action] ? action : "APPROVE";
   const orderLabel = formatOrderNumber(orderNumber);
   const storeName = merchantName?.trim() || "your store";
-  const statusMessage =
-    ACTION_MESSAGES[safeAction] ?? ACTION_MESSAGES.APPROVE;
+  const statusMessage = ACTION_MESSAGES[safeAction] ?? ACTION_MESSAGES.APPROVE;
   const note = merchantNote?.trim() || "";
   const subject = buildSubject(safeAction, orderNumber);
 
@@ -131,9 +131,7 @@ export function buildReturnStatusEmail({
     <p>${escapeHtml(statusMessage)}</p>
     <p><strong>Order:</strong> #${escapeHtml(orderLabel)}<br>
     <strong>Store:</strong> ${escapeHtml(storeName)}${
-      status
-        ? `<br><strong>Status:</strong> ${escapeHtml(status)}`
-        : ""
+      status ? `<br><strong>Status:</strong> ${escapeHtml(status)}` : ""
     }</p>
     <p><strong>Items:</strong></p>
     ${formatItemsHtml(items)}

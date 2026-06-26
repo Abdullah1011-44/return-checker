@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mockPrisma } from "./helpers/mockPrisma.js";
 import {
+  applyDuplicateFlagsToCheckItem,
   DUPLICATE_BLOCKING_RETURN_STATUSES,
   DUPLICATE_RETURN_MESSAGE,
-  applyDuplicateFlagsToCheckItem,
   findDuplicateReturnItems,
   formatDuplicateItemsForResponse,
   hasDuplicateOrderItemIds,
 } from "@/lib/duplicateReturnPrevention";
+import { mockPrisma } from "./helpers/mockPrisma.js";
 
 describe("duplicateReturnPrevention", () => {
   beforeEach(() => {
@@ -118,7 +118,7 @@ describe("duplicateReturnPrevention", () => {
             existingReturnStatus: "APPROVED",
             merchantDecision: "APPROVED",
           },
-        ])
+        ]),
       ).toEqual([
         {
           orderItemId: "item-1",

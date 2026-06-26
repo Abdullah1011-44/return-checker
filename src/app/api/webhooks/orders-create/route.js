@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { AUDIT_EVENTS } from "@/lib/audit";
-import { buildOrderStatusFields, getOrderStatusFieldUpdates } from "@/lib/orderStatusMapper";
+import {
+  buildOrderStatusFields,
+  getOrderStatusFieldUpdates,
+} from "@/lib/orderStatusMapper";
 import { prisma } from "@/lib/prisma";
 import { captureException } from "@/lib/sentry";
 import { logWebhookInvalidHmac } from "@/lib/shopifyComplianceWebhook";
@@ -84,7 +87,7 @@ export async function POST(request) {
       await logWebhookInvalidHmac(
         ROUTE_NAME,
         getShopifyWebhookHeaders(request),
-        request
+        request,
       );
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -125,7 +128,10 @@ export async function POST(request) {
     });
 
     if (existingOrder) {
-      const statusUpdates = getOrderStatusFieldUpdates(existingOrder, parsed.data);
+      const statusUpdates = getOrderStatusFieldUpdates(
+        existingOrder,
+        parsed.data,
+      );
 
       if (statusUpdates) {
         await prisma.customerOrder.update({
@@ -149,7 +155,9 @@ export async function POST(request) {
         fulfillmentStatus: safeOrder.fulfillmentStatus,
         cancelledAt: safeOrder.cancelledAt,
         orderedAt: safeOrder.orderedAt,
-        customerEmail: resolvePlaceholderCustomerEmail(safeOrder.shopifyOrderId),
+        customerEmail: resolvePlaceholderCustomerEmail(
+          safeOrder.shopifyOrderId,
+        ),
         customerName: resolvePlaceholderCustomerName(),
         customerPhone: null,
       },
@@ -186,7 +194,4 @@ export async function POST(request) {
   }
 }
 
-export {
-  extractSafeShopifyOrderFields,
-  normalizeOrderNumber,
-};
+export { extractSafeShopifyOrderFields, normalizeOrderNumber };

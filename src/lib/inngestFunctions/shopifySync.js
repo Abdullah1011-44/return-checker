@@ -2,11 +2,11 @@ import { NonRetriableError } from "inngest";
 import { sanitizeAuditMetadata } from "@/lib/audit";
 import { inngest } from "@/lib/inngest";
 import { prisma } from "@/lib/prisma";
+import { SHOPIFY_SYNC_REQUESTED_EVENT } from "@/lib/shopifySyncQueue";
 import {
   runShopifySyncForMerchant,
   ShopifySyncRunnerError,
 } from "@/lib/shopifySyncRunner";
-import { SHOPIFY_SYNC_REQUESTED_EVENT } from "@/lib/shopifySyncQueue";
 
 function readEventPayload(event) {
   const merchantId = event?.data?.merchantId;
@@ -48,7 +48,7 @@ export const syncShopifyData = inngest.createFunction(
 
     console.log(
       "[Inngest Shopify Sync] started",
-      sanitizeAuditMetadata({ merchantId, reason })
+      sanitizeAuditMetadata({ merchantId, reason }),
     );
 
     await assertMerchantExists(merchantId);
@@ -64,7 +64,7 @@ export const syncShopifyData = inngest.createFunction(
           ordersSynced: summary.ordersSynced,
           productsSynced: summary.productsSynced,
           statusUpdated: summary.statusUpdated,
-        })
+        }),
       );
 
       return summary;
@@ -77,7 +77,7 @@ export const syncShopifyData = inngest.createFunction(
           code: error?.code ?? null,
           message:
             error instanceof Error ? error.message : "Shopify sync job failed",
-        })
+        }),
       );
 
       if (error instanceof ShopifySyncRunnerError && !error.retryable) {
@@ -93,8 +93,8 @@ export const syncShopifyData = inngest.createFunction(
         {
           merchantId,
           code: error?.code ?? "SHOPIFY_SYNC_RUNNER_ERROR",
-        }
+        },
       );
     }
-  }
+  },
 );

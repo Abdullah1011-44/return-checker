@@ -20,10 +20,10 @@ async function main() {
 
   if (!merchant) {
     console.error(
-      `Merchant not found for shopDomain "${SHOPIFY_SHOP_DOMAIN}".`
+      `Merchant not found for shopDomain "${SHOPIFY_SHOP_DOMAIN}".`,
     );
     console.error(
-      "Install the Shopify app first so OAuth creates the merchant record."
+      "Install the Shopify app first so OAuth creates the merchant record.",
     );
     process.exit(1);
   }
@@ -33,7 +33,7 @@ async function main() {
   const { created, skipped } = await seedMerchantOrders(prisma, merchant);
 
   console.log(
-    `\nDone. ${created} order(s) created, ${skipped} skipped (already existed).`
+    `\nDone. ${created} order(s) created, ${skipped} skipped (already existed).`,
   );
   console.log("Test in the return portal while logged in as this merchant:");
   console.log("  Order 1001 / test1@gmail.com");

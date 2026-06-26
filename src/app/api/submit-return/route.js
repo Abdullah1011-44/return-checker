@@ -1,22 +1,19 @@
 import { NextResponse } from "next/server";
-import {
-  AUDIT_ACTORS,
-  AUDIT_EVENTS,
-  safeCreateAuditEvent,
-} from "@/lib/audit";
-import { createApiErrorResponse, handleApiError } from "@/lib/errors";
+import { AUDIT_ACTORS, AUDIT_EVENTS, safeCreateAuditEvent } from "@/lib/audit";
 import {
   DuplicateReturnRequestError,
   findDuplicateReturnItems,
   formatDuplicateItemsForResponse,
   hasDuplicateOrderItemIds,
 } from "@/lib/duplicateReturnPrevention";
-import { captureException } from "@/lib/sentry";
+import { createApiErrorResponse, handleApiError } from "@/lib/errors";
 import {
   findCustomerOrderForReturn,
   resolveMerchantForCustomerFlow,
 } from "@/lib/orderLookup";
 import { prisma } from "@/lib/prisma";
+import { serializeProofImage } from "@/lib/proofImageUrl";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import {
   guessImageMimeType,
   mapRecoveryOption,
@@ -30,8 +27,7 @@ import {
   riskPrismaForReason,
   scoreForReason,
 } from "@/lib/returnScoring";
-import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
-import { serializeProofImage } from "@/lib/proofImageUrl";
+import { captureException } from "@/lib/sentry";
 import {
   parseJsonBody,
   submitReturnSchema,
@@ -92,7 +88,7 @@ export async function POST(request) {
       return createApiErrorResponse(
         "Order not found or not eligible for return",
         404,
-        "ORDER_NOT_ELIGIBLE"
+        "ORDER_NOT_ELIGIBLE",
       );
     }
 
@@ -105,7 +101,7 @@ export async function POST(request) {
           success: false,
           message: "Order does not belong to the current merchant.",
         },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -117,7 +113,7 @@ export async function POST(request) {
       const orderItem = order.items.find(
         (oi) =>
           (item.itemId && oi.id === item.itemId) ||
-          (item.sku && oi.sku === item.sku)
+          (item.sku && oi.sku === item.sku),
       );
 
       if (!orderItem) {
@@ -126,7 +122,7 @@ export async function POST(request) {
             success: false,
             message: `Order item not found for SKU "${item.sku ?? item.itemId ?? "unknown"}".`,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -143,7 +139,7 @@ export async function POST(request) {
         selectedOption: mapRecoveryOption(item.selectedOption),
         imageUrl: serializeProofImage(
           item.proofImageName,
-          item.proofImage ?? item.imageUrl
+          item.proofImage ?? item.imageUrl,
         ),
         imageMimeType: guessImageMimeType(item.proofImage ?? item.imageUrl),
         recoveryScore: scoreForReason(reasonKey),
@@ -167,7 +163,7 @@ export async function POST(request) {
           message:
             "The same item cannot be submitted more than once in a single request.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -177,7 +173,7 @@ export async function POST(request) {
     if (order.deliveredAt && order.merchant?.returnWindowDays != null) {
       windowExpiresAt = new Date(order.deliveredAt);
       windowExpiresAt.setDate(
-        windowExpiresAt.getDate() + order.merchant.returnWindowDays
+        windowExpiresAt.getDate() + order.merchant.returnWindowDays,
       );
     }
 
@@ -190,7 +186,7 @@ export async function POST(request) {
 
       if (duplicateItems.length > 0) {
         throw new DuplicateReturnRequestError(
-          formatDuplicateItemsForResponse(duplicateItems)
+          formatDuplicateItemsForResponse(duplicateItems),
         );
       }
 
@@ -235,7 +231,7 @@ export async function POST(request) {
           (item) =>
             Boolean(item.proofImage) ||
             Boolean(item.imageUrl) ||
-            Boolean(item.proofImageName)
+            Boolean(item.proofImageName),
         ),
       },
     });
@@ -270,7 +266,7 @@ export async function POST(request) {
           message: error.message,
           duplicateItems: error.duplicateItems,
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
 

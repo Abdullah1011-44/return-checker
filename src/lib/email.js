@@ -1,5 +1,5 @@
-import { optionalEnv } from "@/lib/env";
 import { Resend } from "resend";
+import { optionalEnv } from "@/lib/env";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

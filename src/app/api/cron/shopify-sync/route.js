@@ -27,12 +27,15 @@ async function handleCronShopifySync(request) {
   if (auth.reason === "missing_secret") {
     return NextResponse.json(
       { ok: false, error: "CRON_SECRET is not configured" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
   if (auth.reason === "unauthorized") {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { ok: false, error: "Unauthorized" },
+      { status: 401 },
+    );
   }
 
   try {
@@ -54,7 +57,7 @@ async function handleCronShopifySync(request) {
         ok: false,
         error: "Shopify sync scheduler failed. Please try again later.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

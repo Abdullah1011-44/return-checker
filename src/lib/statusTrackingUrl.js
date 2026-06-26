@@ -14,9 +14,7 @@ export function buildStatusTrackingUrl(orderNumber, email) {
 
 export function readStatusPrefillFromSearchParams(searchParams) {
   const order =
-    searchParams.get("order") ??
-    searchParams.get("orderNumber") ??
-    "";
+    searchParams.get("order") ?? searchParams.get("orderNumber") ?? "";
   const email = searchParams.get("email") ?? "";
   return { orderNumber: order, email };
 }

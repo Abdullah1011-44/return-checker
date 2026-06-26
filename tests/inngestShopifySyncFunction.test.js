@@ -8,7 +8,8 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 vi.mock("@/lib/shopifySyncRunner", () => ({
-  runShopifySyncForMerchant: (...args) => mockRunShopifySyncForMerchant(...args),
+  runShopifySyncForMerchant: (...args) =>
+    mockRunShopifySyncForMerchant(...args),
   ShopifySyncRunnerError: class ShopifySyncRunnerError extends Error {
     constructor(message, options = {}) {
       super(message);

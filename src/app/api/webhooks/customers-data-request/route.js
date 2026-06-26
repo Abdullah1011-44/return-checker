@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  ADMIN_AUDIT_EVENTS,
-  ADMIN_AUDIT_SEVERITY,
-} from "@/lib/adminAudit";
+import { ADMIN_AUDIT_EVENTS, ADMIN_AUDIT_SEVERITY } from "@/lib/adminAudit";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { captureException } from "@/lib/sentry";
 import {

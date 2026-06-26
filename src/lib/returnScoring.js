@@ -87,14 +87,19 @@ export function getPrimaryReasonKey(items) {
     return scoreForReason(key) === lowestScore;
   });
   return reasonKeyFromUiOrPrisma(
-    primary?.returnReason ?? primary?.reason ?? items[0].returnReason ?? items[0].reason
+    primary?.returnReason ??
+      primary?.reason ??
+      items[0].returnReason ??
+      items[0].reason,
   );
 }
 
 export function getRequestBestActionFromItems(items) {
   const actions = items.map((item) => {
     const key = reasonKeyFromUiOrPrisma(item.returnReason ?? item.reason);
-    return item.bestAction || item.recommendedAction || bestActionForReason(key);
+    return (
+      item.bestAction || item.recommendedAction || bestActionForReason(key)
+    );
   });
   const unique = [...new Set(actions.filter(Boolean))];
   if (unique.length === 0) return "Manual Review";
@@ -104,9 +109,13 @@ export function getRequestBestActionFromItems(items) {
 
 export function resolveRequestEligibility(orderItems) {
   const returnable = orderItems.filter((oi) => oi.isReturnable);
-  if (returnable.length === orderItems.length) return { status: "ELIGIBLE", reason: null };
+  if (returnable.length === orderItems.length)
+    return { status: "ELIGIBLE", reason: null };
   if (returnable.length === 0) {
-    return { status: "NOT_ELIGIBLE", reason: "No selected items are returnable." };
+    return {
+      status: "NOT_ELIGIBLE",
+      reason: "No selected items are returnable.",
+    };
   }
   return {
     status: "NEEDS_REVIEW",

@@ -49,7 +49,7 @@ export async function POST(request) {
 
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -59,7 +59,7 @@ export async function POST(request) {
     if (!syncContext.hasToken || !syncContext.shopDomain) {
       return NextResponse.json(
         { success: false, error: "Missing Shopify connection" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -69,7 +69,7 @@ export async function POST(request) {
       AUDIT_EVENTS.SHOPIFY_PRODUCTS_SYNC_STARTED,
       buildProductSyncAuditMeta(syncContext, {
         actorType: AUDIT_ACTORS.MERCHANT,
-      })
+      }),
     );
 
     await safeCreateAdminAuditLog({
@@ -97,7 +97,7 @@ export async function POST(request) {
         actorType: AUDIT_ACTORS.MERCHANT,
         queued: true,
         requestedAt: queueResult.requestedAt,
-      })
+      }),
     );
 
     await safeCreateAdminAuditLog({
@@ -133,7 +133,7 @@ export async function POST(request) {
       buildProductSyncAuditMeta(syncContext, {
         actorType: AUDIT_ACTORS.MERCHANT,
         code: error?.code ?? "SHOPIFY_PRODUCTS_SYNC_ERROR",
-      })
+      }),
     );
 
     await safeCreateAdminAuditLog({
@@ -161,7 +161,8 @@ export async function POST(request) {
 
     return handleApiError(error, {
       context: "shopify-products-sync",
-      fallbackMessage: "Unable to queue Shopify product sync. Please try again.",
+      fallbackMessage:
+        "Unable to queue Shopify product sync. Please try again.",
       fallbackCode: "SHOPIFY_PRODUCTS_SYNC_ERROR",
     });
   }

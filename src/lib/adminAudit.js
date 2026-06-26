@@ -44,6 +44,7 @@ export const ADMIN_AUDIT_EVENTS = {
   RATE_LIMIT_TRIGGERED: "RATE_LIMIT_TRIGGERED",
   SERVER_CONFIG_ERROR: "SERVER_CONFIG_ERROR",
   ADMIN_ACTION: "ADMIN_ACTION",
+  MERCHANT_SETTINGS_UPDATED: "MERCHANT_SETTINGS_UPDATED",
   GENERIC_ERROR: "GENERIC_ERROR",
 };
 
@@ -163,7 +164,12 @@ export async function safeCreateAdminAuditLog(args) {
  */
 export async function logUnauthorizedApiAccess(
   request,
-  { routeName, resourceId = null, method = null, reason = "Missing or invalid merchant session" }
+  {
+    routeName,
+    resourceId = null,
+    method = null,
+    reason = "Missing or invalid merchant session",
+  },
 ) {
   await safeCreateAdminAuditLog({
     eventType: ADMIN_AUDIT_EVENTS.UNAUTHORIZED_ACCESS,
@@ -191,7 +197,13 @@ export async function logOrderStatusUpdated({
   oldStatus,
   newStatus,
 }) {
-  if (!merchantId || !orderId || !oldStatus || !newStatus || oldStatus === newStatus) {
+  if (
+    !merchantId ||
+    !orderId ||
+    !oldStatus ||
+    !newStatus ||
+    oldStatus === newStatus
+  ) {
     return null;
   }
 

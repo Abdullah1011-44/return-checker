@@ -19,7 +19,7 @@ vi.mock("@/lib/orderLookup", () => ({
   orderNotFoundMessage: vi.fn((merchant) =>
     merchant
       ? "Order not found for your store."
-      : "Order not found. Please check your order number and email."
+      : "Order not found. Please check your order number and email.",
   ),
 }));
 
@@ -71,7 +71,7 @@ describe("API route smoke tests", () => {
       jsonRequest("http://localhost:3000/api/check-return", {
         orderNumber: "1001",
         email: "test1@gmail.com",
-      })
+      }),
     );
     const checkReturnText = await checkReturnResponse.text();
     const checkReturnBody = JSON.parse(checkReturnText);
@@ -91,7 +91,7 @@ describe("API route smoke tests", () => {
       jsonRequest("http://localhost:3000/api/return-status", {
         orderNumber: "1001",
         email: "test1@gmail.com",
-      })
+      }),
     );
     const returnStatusText = await returnStatusResponse.text();
     const returnStatusBody = JSON.parse(returnStatusText);
@@ -110,7 +110,7 @@ describe("API route smoke tests", () => {
     const missingFieldResponse = await checkReturnPost(
       jsonRequest("http://localhost:3000/api/check-return", {
         orderNumber: "1001",
-      })
+      }),
     );
     const missingFieldBody = await missingFieldResponse.json();
 
@@ -121,7 +121,7 @@ describe("API route smoke tests", () => {
     expectNoStackTrace(JSON.stringify(missingFieldBody));
 
     const malformedJsonResponse = await checkReturnPost(
-      jsonRequest("http://localhost:3000/api/check-return", "{not-valid-json")
+      jsonRequest("http://localhost:3000/api/check-return", "{not-valid-json"),
     );
     const malformedJsonBody = await malformedJsonResponse.json();
 

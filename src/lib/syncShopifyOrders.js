@@ -1,9 +1,9 @@
-import { prisma } from "@/lib/prisma";
 import { logOrderStatusUpdated } from "@/lib/adminAudit";
 import {
   buildOrderStatusFields,
   getOrderStatusFieldUpdates,
 } from "@/lib/orderStatusMapper";
+import { prisma } from "@/lib/prisma";
 import {
   parseShopifyNextEndpoint,
   shopifyAdminRequest,
@@ -81,7 +81,7 @@ async function fetchAllShopifyOrders(shopDomain, accessToken) {
     const { data, headers } = await shopifyAdminRequest(
       shopDomain,
       accessToken,
-      endpoint
+      endpoint,
     );
 
     const pageOrders = Array.isArray(data?.orders) ? data.orders : [];
@@ -112,8 +112,7 @@ function buildCustomerOrderData(order, merchant) {
 function buildOrderItemData(lineItem) {
   return {
     shopifyLineItemId: String(lineItem.id),
-    productName:
-      lineItem.title || lineItem.name || "Untitled item",
+    productName: lineItem.title || lineItem.name || "Untitled item",
     sku: mapLineItemSku(lineItem),
     quantity: lineItem.quantity ?? 1,
     price: lineItem.price ?? "0",
@@ -194,14 +193,11 @@ export async function syncShopifyOrders(merchantId) {
     hasToken: Boolean(merchant.shopifyAccessToken),
   });
 
-  await testShopifyConnection(
-    merchant.shopDomain,
-    merchant.shopifyAccessToken
-  );
+  await testShopifyConnection(merchant.shopDomain, merchant.shopifyAccessToken);
 
   const { orders: shopifyOrders, pagesFetched } = await fetchAllShopifyOrders(
     merchant.shopDomain,
-    merchant.shopifyAccessToken
+    merchant.shopifyAccessToken,
   );
 
   const counts = {
@@ -228,7 +224,7 @@ export async function syncShopifyOrders(merchantId) {
     if (existingOrder) {
       const statusUpdates = getOrderStatusFieldUpdates(
         existingOrder,
-        shopifyOrder
+        shopifyOrder,
       );
 
       if (statusUpdates) {

@@ -1,5 +1,4 @@
 import { handleApiError } from "@/lib/errors";
-import { captureException } from "@/lib/sentry";
 import { buildOrderCheckResponse, findMockOrder } from "@/lib/mockOrders";
 import {
   buildOrderCheckApiResponse,
@@ -8,6 +7,7 @@ import {
   resolveMerchantForCustomerFlow,
 } from "@/lib/orderLookup";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { captureException } from "@/lib/sentry";
 import {
   checkReturnSchema,
   parseJsonBody,

@@ -12,7 +12,7 @@ describe("orderStatusMapper", () => {
         cancelled_at: "2026-01-01T00:00:00Z",
         fulfillment_status: "fulfilled",
         financial_status: "paid",
-      })
+      }),
     ).toBe("CANCELLED");
   });
 
@@ -21,7 +21,7 @@ describe("orderStatusMapper", () => {
       mapShopifyOrderStatus({
         fulfillment_status: "fulfilled",
         financial_status: "paid",
-      })
+      }),
     ).toBe("FULFILLED");
   });
 
@@ -30,7 +30,7 @@ describe("orderStatusMapper", () => {
       mapShopifyOrderStatus({
         fulfillment_status: null,
         financial_status: "paid",
-      })
+      }),
     ).toBe("PAID");
   });
 
@@ -39,7 +39,7 @@ describe("orderStatusMapper", () => {
       mapShopifyOrderStatus({
         fulfillment_status: "partial",
         financial_status: "pending",
-      })
+      }),
     ).toBe("PENDING");
   });
 
@@ -55,7 +55,7 @@ describe("orderStatusMapper", () => {
       getOrderStatusFieldUpdates(existing, {
         financial_status: "paid",
         fulfillment_status: null,
-      })
+      }),
     ).toBeNull();
   });
 
@@ -71,7 +71,7 @@ describe("orderStatusMapper", () => {
       getOrderStatusFieldUpdates(existing, {
         financial_status: "paid",
         fulfillment_status: null,
-      })
+      }),
     ).toEqual({
       status: "PAID",
       financialStatus: "paid",
@@ -84,7 +84,7 @@ describe("orderStatusMapper", () => {
         financial_status: "paid",
         fulfillment_status: "fulfilled",
         cancelled_at: null,
-      })
+      }),
     ).toEqual({
       status: "FULFILLED",
       financialStatus: "paid",

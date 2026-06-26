@@ -72,7 +72,7 @@ describe("fulfillments-create webhook route", () => {
       mapOrderStatusFromFulfillment({
         shipmentStatus: "delivered",
         fulfillmentStatus: "success",
-      })
+      }),
     ).toBe("DELIVERED");
   });
 
@@ -86,8 +86,8 @@ describe("fulfillments-create webhook route", () => {
         {
           fulfillmentStatus: "success",
           shipmentStatus: "in_transit",
-        }
-      )
+        },
+      ),
     ).toEqual({
       fulfillmentStatus: "fulfilled",
       status: "FULFILLED",
@@ -101,7 +101,7 @@ describe("fulfillments-create webhook route", () => {
       new Request("http://localhost/api/webhooks/fulfillments-create", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -114,7 +114,7 @@ describe("fulfillments-create webhook route", () => {
       new Request("http://localhost/api/webhooks/fulfillments-create", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -136,7 +136,7 @@ describe("fulfillments-create webhook route", () => {
           shipmentStatus: "delivered",
           source: "shopify_webhook",
         },
-      })
+      }),
     );
   });
 });

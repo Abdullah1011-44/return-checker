@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { GET, POST, PUT } from "@/app/api/inngest/route";
 import { inngest } from "@/lib/inngest";
 import { syncShopifyData } from "@/lib/inngestFunctions/shopifySync";
-import { GET, POST, PUT } from "@/app/api/inngest/route";
 
 describe("Inngest foundation", () => {
   it("exports ReturnRadar Inngest client", () => {

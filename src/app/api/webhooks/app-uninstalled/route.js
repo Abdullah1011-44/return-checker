@@ -7,11 +7,7 @@ import {
   safeCreateAdminAuditLog,
   sanitizeAdminAuditMetadata,
 } from "@/lib/adminAudit";
-import {
-  AUDIT_ACTORS,
-  AUDIT_EVENTS,
-  logAuditInfo,
-} from "@/lib/audit";
+import { AUDIT_ACTORS, AUDIT_EVENTS, logAuditInfo } from "@/lib/audit";
 import {
   createApiErrorResponse,
   handleApiError,
@@ -69,7 +65,11 @@ export async function POST(request) {
 
     if (!hmacCheck.valid) {
       await logWebhookInvalidHmac(ROUTE_NAME, headers, request);
-      return createApiErrorResponse("Unauthorized", 401, "INVALID_WEBHOOK_HMAC");
+      return createApiErrorResponse(
+        "Unauthorized",
+        401,
+        "INVALID_WEBHOOK_HMAC",
+      );
     }
 
     const payload = JSON.parse(rawBody);
@@ -114,7 +114,7 @@ export async function POST(request) {
         actorType: AUDIT_ACTORS.WEBHOOK,
         shopDomain,
         merchantUpdated: merchantMarkedInactive,
-      })
+      }),
     );
 
     await safeCreateAdminAuditLog({

@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { mapReturnRequestToCustomerStatus } from "@/lib/customerStatusMapper";
 import { prisma } from "@/lib/prisma";
-import {
-  normalizeEmail,
-  normalizeOrderNumber,
-} from "@/lib/returnApiMappers";
+import { normalizeEmail, normalizeOrderNumber } from "@/lib/returnApiMappers";
 
 export async function POST(request) {
   try {
@@ -18,7 +15,7 @@ export async function POST(request) {
           found: false,
           message: "Order number and email are required.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -66,7 +63,7 @@ export async function POST(request) {
         found: false,
         message: "Unable to look up return status. Please try again.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

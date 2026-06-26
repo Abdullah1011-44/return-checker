@@ -67,16 +67,14 @@ describe("shopifyWebhookHandlers", () => {
       method: "POST",
     });
 
-    expect(
-      verifyIncomingShopifyWebhook(request, '{"id":123}')
-    ).toEqual({
+    expect(verifyIncomingShopifyWebhook(request, '{"id":123}')).toEqual({
       valid: false,
       shopDomain: "demo.myshopify.com",
       error: "Invalid webhook HMAC",
     });
     expect(mockVerifyShopifyWebhookHmac).toHaveBeenCalledWith(
       '{"id":123}',
-      "test-hmac"
+      "test-hmac",
     );
   });
 
@@ -106,7 +104,7 @@ describe("shopifyWebhookHandlers", () => {
     mockPrisma.merchant.findFirst.mockResolvedValue(merchant);
 
     await expect(getWebhookMerchant("demo.myshopify.com")).resolves.toEqual(
-      merchant
+      merchant,
     );
     expect(mockPrisma.merchant.findFirst).toHaveBeenCalledWith({
       where: {
@@ -128,7 +126,7 @@ describe("shopifyWebhookHandlers", () => {
         shopDomain: "demo.myshopify.com",
         email: "secret@example.com",
         payload: { id: 1 },
-      })
+      }),
     ).toEqual({
       shopDomain: "demo.myshopify.com",
     });
@@ -157,7 +155,7 @@ describe("shopifyWebhookHandlers", () => {
           shopDomain: "demo.myshopify.com",
           topic: "orders/create",
         },
-      })
+      }),
     );
   });
 

@@ -52,7 +52,9 @@ function resolveAppUrl() {
 function isLocalhostAppUrl(appUrl) {
   try {
     const hostname = new URL(appUrl).hostname.toLowerCase();
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+    return (
+      hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+    );
   } catch {
     return false;
   }
@@ -90,7 +92,7 @@ function normalizeShopDomain(shopDomain) {
 
 function webhookAlreadyExists(existingWebhooks, topic, address) {
   return existingWebhooks.some(
-    (webhook) => webhook?.topic === topic && webhook?.address === address
+    (webhook) => webhook?.topic === topic && webhook?.address === address,
   );
 }
 
@@ -107,7 +109,7 @@ async function fetchExistingWebhooks(shopDomain, accessToken) {
   const { data } = await shopifyAdminRequest(
     shopDomain,
     accessToken,
-    "/webhooks.json"
+    "/webhooks.json",
   );
 
   return Array.isArray(data?.webhooks) ? data.webhooks : [];
@@ -181,7 +183,7 @@ export async function registerShopifyWebhooks({ shopDomain, accessToken }) {
   try {
     existingWebhooks = await fetchExistingWebhooks(
       normalizedShopDomain,
-      accessToken
+      accessToken,
     );
   } catch (error) {
     result.failed.push({
@@ -222,7 +224,7 @@ export async function registerShopifyWebhooks({ shopDomain, accessToken }) {
         normalizedShopDomain,
         accessToken,
         definition.topic,
-        address
+        address,
       );
 
       result.registered.push({

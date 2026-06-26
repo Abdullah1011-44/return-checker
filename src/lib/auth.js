@@ -1,11 +1,11 @@
 import { cookies } from "next/headers";
-import { prisma } from "@/lib/prisma";
 import {
   decodeMerchantSessionToken,
   encodeMerchantSessionToken,
   MERCHANT_SESSION_COOKIE,
   merchantSessionCookieOptions,
 } from "@/lib/merchantSession";
+import { prisma } from "@/lib/prisma";
 
 const MERCHANT_SELECT = {
   id: true,
@@ -23,7 +23,9 @@ const MERCHANT_SELECT = {
  */
 export async function createMerchantSession(merchant) {
   if (!merchant?.id || !merchant?.shopDomain) {
-    throw new Error("Cannot create merchant session without id and shopDomain.");
+    throw new Error(
+      "Cannot create merchant session without id and shopDomain.",
+    );
   }
 
   const token = encodeMerchantSessionToken({
@@ -35,7 +37,7 @@ export async function createMerchantSession(merchant) {
   cookieStore.set(
     MERCHANT_SESSION_COOKIE,
     token,
-    merchantSessionCookieOptions()
+    merchantSessionCookieOptions(),
   );
 }
 

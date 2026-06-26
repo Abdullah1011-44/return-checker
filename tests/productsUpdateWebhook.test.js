@@ -80,7 +80,7 @@ describe("products-update webhook route", () => {
       new Request("http://localhost/api/webhooks/products-update", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -93,7 +93,7 @@ describe("products-update webhook route", () => {
       new Request("http://localhost/api/webhooks/products-update", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -118,7 +118,7 @@ describe("products-update webhook route", () => {
           title: "Updated Tee",
           source: "shopify_webhook",
         },
-      })
+      }),
     );
   });
 
@@ -133,7 +133,7 @@ describe("products-update webhook route", () => {
       new Request("http://localhost/api/webhooks/products-update", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(401);

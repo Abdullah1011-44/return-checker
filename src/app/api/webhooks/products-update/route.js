@@ -32,8 +32,7 @@ function extractSafeProductFields(payload) {
     return null;
   }
 
-  const shopifyProductLegacyId =
-    payload.id != null ? String(payload.id) : null;
+  const shopifyProductLegacyId = payload.id != null ? String(payload.id) : null;
   const shopifyProductGid = toOptionalString(payload.admin_graphql_api_id);
   const title = toOptionalString(payload.title);
 
@@ -135,7 +134,7 @@ export async function POST(request) {
       await logWebhookInvalidHmac(
         ROUTE_NAME,
         getShopifyWebhookHeaders(request),
-        request
+        request,
       );
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -166,7 +165,10 @@ export async function POST(request) {
       return NextResponse.json({ success: false }, { status: 400 });
     }
 
-    const existingProduct = await findMerchantProduct(merchant.id, productFields);
+    const existingProduct = await findMerchantProduct(
+      merchant.id,
+      productFields,
+    );
 
     if (!existingProduct) {
       console.log("[Shopify Webhook]", {

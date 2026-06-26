@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import StatusBadge from "@/components/StatusBadge";
 import { readStatusPrefillFromSearchParams } from "@/lib/statusTrackingUrl";
 
@@ -76,7 +76,8 @@ function ReturnStatusContent() {
       className="min-h-screen flex items-center justify-center px-4 py-12"
       style={{
         backgroundColor: "#f8fafc",
-        backgroundImage: "radial-gradient(circle, #cbd5e1 1px, transparent 1px)",
+        backgroundImage:
+          "radial-gradient(circle, #cbd5e1 1px, transparent 1px)",
         backgroundSize: "24px 24px",
       }}
     >
@@ -153,14 +154,15 @@ function ReturnStatusContent() {
                   disabled={loading}
                   className="w-full bg-slate-800 hover:bg-slate-700 active:scale-[0.98] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-2.5 text-sm shadow-md shadow-slate-800/20"
                 >
-                  {loading ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      Looking up…
-                    </>
-                  ) : (
-                    <>Track Return Status <span className="opacity-70">→</span></>
-                  )}
+                  {loading
+                    ? <>
+                        <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        Looking up…
+                      </>
+                    : <>
+                        Track Return Status{" "}
+                        <span className="opacity-70">→</span>
+                      </>}
                 </button>
               </form>
             )}
@@ -187,33 +189,35 @@ function ReturnStatusContent() {
                     </span>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <span className="text-slate-500 shrink-0">Last updated</span>
+                    <span className="text-slate-500 shrink-0">
+                      Last updated
+                    </span>
                     <span className="font-semibold text-slate-800 text-right">
                       {formatDate(returnData.updatedAt)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <span className="text-slate-500 shrink-0">Merchant decision</span>
+                    <span className="text-slate-500 shrink-0">
+                      Merchant decision
+                    </span>
                     <span className="font-semibold text-slate-800 text-right">
                       {returnData.merchantDecision}
                     </span>
                   </div>
                 </div>
 
-                {returnData.merchantNote ? (
-                  <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-blue-700 mb-2">
-                      Message from merchant
-                    </p>
-                    <p className="text-sm text-blue-900 whitespace-pre-wrap leading-relaxed">
-                      {returnData.merchantNote}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500 text-center">
-                    No merchant note yet — check back after review.
-                  </p>
-                )}
+                {returnData.merchantNote
+                  ? <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-blue-700 mb-2">
+                        Message from merchant
+                      </p>
+                      <p className="text-sm text-blue-900 whitespace-pre-wrap leading-relaxed">
+                        {returnData.merchantNote}
+                      </p>
+                    </div>
+                  : <p className="text-xs text-slate-500 text-center">
+                      No merchant note yet — check back after review.
+                    </p>}
 
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
@@ -229,7 +233,9 @@ function ReturnStatusContent() {
                           {item.productName}
                         </p>
                         {item.sku && (
-                          <p className="text-xs text-slate-500">SKU: {item.sku}</p>
+                          <p className="text-xs text-slate-500">
+                            SKU: {item.sku}
+                          </p>
                         )}
                         <p className="text-xs text-slate-600">
                           Reason: {item.returnReason}
@@ -266,7 +272,10 @@ function ReturnStatusContent() {
           </Link>
           {" · "}
           Need help?{" "}
-          <a href="#" className="underline hover:text-slate-600 transition-colors">
+          <a
+            href="#"
+            className="underline hover:text-slate-600 transition-colors"
+          >
             Contact support
           </a>
         </p>

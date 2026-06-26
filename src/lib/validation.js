@@ -76,7 +76,7 @@ export const orderNumberSchema = z
 
 export const merchantActionSchema = z.enum(
   ["APPROVE", "REJECT", "NEEDS_MORE_INFO", "RESOLVE"],
-  { message: "Invalid merchant action." }
+  { message: "Invalid merchant action." },
 );
 
 export const merchantNoteSchema = z
@@ -173,7 +173,8 @@ function formatZodDetails(error) {
 /** Build a safe 400 response for validation failures. */
 export function validationErrorResponse(error, detailsOverride) {
   const details =
-    detailsOverride ?? formatZodDetails(error instanceof z.ZodError ? error : null);
+    detailsOverride ??
+    formatZodDetails(error instanceof z.ZodError ? error : null);
 
   return NextResponse.json(
     {
@@ -181,7 +182,7 @@ export function validationErrorResponse(error, detailsOverride) {
       error: "Invalid request",
       details,
     },
-    { status: 400 }
+    { status: 400 },
   );
 }
 

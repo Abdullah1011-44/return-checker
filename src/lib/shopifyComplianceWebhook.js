@@ -44,7 +44,7 @@ export async function logWebhookReceived(routeName, request) {
 
   logAuditInfo(
     AUDIT_EVENTS.WEBHOOK_RECEIVED,
-    buildWebhookAuditMeta(routeName, headers)
+    buildWebhookAuditMeta(routeName, headers),
   );
 
   await safeCreateAdminAuditLog({
@@ -68,7 +68,7 @@ export async function logWebhookInvalidHmac(routeName, headers, request) {
 
   logAuditInfo(
     AUDIT_EVENTS.WEBHOOK_INVALID_HMAC,
-    buildWebhookAuditMeta(routeName, headers, { reason: "Invalid HMAC" })
+    buildWebhookAuditMeta(routeName, headers, { reason: "Invalid HMAC" }),
   );
 
   await safeCreateAdminAuditLog({
@@ -162,7 +162,9 @@ export function handleWebhookRouteError(routeName, error, meta = {}) {
 
 export function logCustomerFromPayload(payload) {
   if (payload?.customer) {
-    console.log("[shopify-compliance-webhook] customer data present in payload");
+    console.log(
+      "[shopify-compliance-webhook] customer data present in payload",
+    );
   }
 }
 

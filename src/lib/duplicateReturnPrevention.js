@@ -49,7 +49,11 @@ export async function findDuplicateReturnItems({
   merchantId,
   orderItemIds,
 }) {
-  if (!merchantId || !Array.isArray(orderItemIds) || orderItemIds.length === 0) {
+  if (
+    !merchantId ||
+    !Array.isArray(orderItemIds) ||
+    orderItemIds.length === 0
+  ) {
     return [];
   }
 

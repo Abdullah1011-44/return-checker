@@ -102,7 +102,7 @@ export function getClientIp(request) {
 export function rateLimitResponse(result) {
   const retryAfterSeconds = Math.max(
     1,
-    Math.ceil((result.resetAt - Date.now()) / 1000)
+    Math.ceil((result.resetAt - Date.now()) / 1000),
   );
 
   const headers = {
@@ -124,7 +124,7 @@ export function rateLimitResponse(result) {
     {
       status: 429,
       headers,
-    }
+    },
   );
 }
 
@@ -132,10 +132,7 @@ export function rateLimitResponse(result) {
  * Convenience helper for API routes.
  * Keys by route name + client IP — never merchantId from request body.
  */
-export function checkRateLimit(
-  request,
-  { routeName, limit, windowMs }
-) {
+export function checkRateLimit(request, { routeName, limit, windowMs }) {
   const ip = getClientIp(request);
   const key = `${routeName}:${ip}`;
 

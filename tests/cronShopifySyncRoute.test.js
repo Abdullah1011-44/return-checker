@@ -36,7 +36,10 @@ const schedulerResult = {
   ],
 };
 
-function cronRequest(method = "GET", authorization = "Bearer test-cron-secret") {
+function cronRequest(
+  method = "GET",
+  authorization = "Bearer test-cron-secret",
+) {
   return new Request("http://localhost:3000/api/cron/shopify-sync", {
     method,
     headers: authorization ? { authorization } : {},
@@ -101,7 +104,7 @@ describe("cron shopify-sync route", () => {
 
   it("returns safe 500 when scheduler throws", async () => {
     mockRunShopifySyncScheduler.mockRejectedValue(
-      new Error("shpat_secret_token should not leak")
+      new Error("shpat_secret_token should not leak"),
     );
 
     const response = await GET(cronRequest("GET"));

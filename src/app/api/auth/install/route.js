@@ -29,7 +29,7 @@ export async function GET(request) {
     if (!shopCheck.valid) {
       return NextResponse.json(
         { success: false, message: shopCheck.error },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -38,7 +38,11 @@ export async function GET(request) {
     const state = generateOAuthState();
 
     const cookieStore = await cookies();
-    cookieStore.set(SHOPIFY_OAUTH_STATE_COOKIE, state, oauthStateCookieOptions());
+    cookieStore.set(
+      SHOPIFY_OAUTH_STATE_COOKIE,
+      state,
+      oauthStateCookieOptions(),
+    );
 
     const authorizeUrl = buildAuthorizeUrl({
       shop: shopCheck.shop,
@@ -68,13 +72,13 @@ export async function GET(request) {
       }
       return NextResponse.json(
         { success: false, message: "Server configuration error" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     return NextResponse.json(
       { success: false, message: "Unable to start Shopify installation." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

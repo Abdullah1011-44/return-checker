@@ -67,7 +67,13 @@ export function generateOAuthState() {
  * Step 1 of OAuth: build Shopify authorize URL.
  * Merchant is sent here to grant scopes.
  */
-export function buildAuthorizeUrl({ shop, state, apiKey, scopes, redirectUri }) {
+export function buildAuthorizeUrl({
+  shop,
+  state,
+  apiKey,
+  scopes,
+  redirectUri,
+}) {
   const params = new URLSearchParams({
     client_id: apiKey,
     scope: scopes,
@@ -213,12 +219,18 @@ export function oauthStateCookieOptions() {
  * Persist installed shop after successful OAuth.
  * Uses shopDomain as the unique key for upsert.
  */
-export async function upsertMerchantFromOAuth(prisma, shop, accessToken, returnedScopes) {
+export async function upsertMerchantFromOAuth(
+  prisma,
+  shop,
+  accessToken,
+  returnedScopes,
+) {
   // Temporary placeholders until merchant profile sync from Shopify Admin API
   const shopName = shop.replace(SHOP_DOMAIN_SUFFIX, "") || shop;
   const installEmail = `auth+${shop}@shopify.install`;
 
-  const scopeValue = returnedScopes ?? optionalEnv("SHOPIFY_SCOPES", "read_orders");
+  const scopeValue =
+    returnedScopes ?? optionalEnv("SHOPIFY_SCOPES", "read_orders");
 
   return prisma.merchant.upsert({
     where: { shopDomain: shop },

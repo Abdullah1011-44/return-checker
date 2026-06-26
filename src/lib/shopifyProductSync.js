@@ -62,7 +62,7 @@ const PRODUCTS_SYNC_QUERY = `
 function validateMerchantForProductSync(merchant) {
   if (!merchant?.id || !merchant?.shopDomain || !merchant?.accessToken) {
     throw new Error(
-      "Merchant id, shopDomain, and accessToken are required for product sync"
+      "Merchant id, shopDomain, and accessToken are required for product sync",
     );
   }
 }
@@ -125,7 +125,8 @@ function buildVariantFields(variantNode, syncedAt) {
 
   return {
     shopifyVariantLegacyId: toLegacyId(variantNode.legacyResourceId),
-    title: variantNode.title?.trim() || variantNode.displayName?.trim() || "Default",
+    title:
+      variantNode.title?.trim() || variantNode.displayName?.trim() || "Default",
     displayName: toOptionalString(variantNode.displayName),
     sku: toOptionalString(variantNode.sku),
     barcode: toOptionalString(variantNode.barcode),
@@ -175,7 +176,7 @@ async function upsertProductWithVariants({
 
     if (productNode.variants?.pageInfo?.hasNextPage) {
       warnings.push(
-        `Product ${productNode.title} has more than 100 variants; later task should add nested variant pagination.`
+        `Product ${productNode.title} has more than 100 variants; later task should add nested variant pagination.`,
       );
     }
 
@@ -245,7 +246,9 @@ export async function syncShopifyProductsForMerchant(merchant) {
     });
 
     const connection = data?.products;
-    const productNodes = Array.isArray(connection?.nodes) ? connection.nodes : [];
+    const productNodes = Array.isArray(connection?.nodes)
+      ? connection.nodes
+      : [];
     const syncedAt = new Date();
 
     for (const productNode of productNodes) {

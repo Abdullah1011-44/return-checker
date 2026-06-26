@@ -20,7 +20,7 @@ import {
 
 function setSessionCookie(token) {
   mockCookieGet.mockImplementation((name) =>
-    name === MERCHANT_SESSION_COOKIE ? { value: token } : undefined
+    name === MERCHANT_SESSION_COOKIE ? { value: token } : undefined,
   );
 }
 
@@ -107,7 +107,7 @@ describe("merchant authentication", () => {
       expect(mockPrisma.merchant.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ isActive: true }),
-        })
+        }),
       );
     });
   });

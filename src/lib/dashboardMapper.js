@@ -63,8 +63,7 @@ function mapReturnItemToUi(returnItem) {
   const returnReason = REASON_TO_UI[returnItem.reason] ?? "other";
   const reasonKey = reasonKeyFromUiOrPrisma(returnItem.reason);
   const proof = parseProofImage(returnItem.imageUrl);
-  const recoveryScore =
-    returnItem.recoveryScore ?? scoreForReason(reasonKey);
+  const recoveryScore = returnItem.recoveryScore ?? scoreForReason(reasonKey);
   const riskLevel = returnItem.riskLevel
     ? riskUiFromPrisma(returnItem.riskLevel)
     : riskUiForReason(reasonKey);
@@ -116,7 +115,7 @@ function mapOrderStatusForDashboard(order) {
 export function mapReturnRequestToDashboard(returnRequest) {
   const selectedItems = (returnRequest.items ?? []).map(mapReturnItemToUi);
   const primaryReason = getPrimaryReasonKey(
-    selectedItems.map((item) => ({ returnReason: item.returnReason }))
+    selectedItems.map((item) => ({ returnReason: item.returnReason })),
   );
   const combinedComment = selectedItems
     .map((item) => item.comment)
@@ -136,8 +135,7 @@ export function mapReturnRequestToDashboard(returnRequest) {
 
   const recoveryScore =
     primaryItem?.recoveryScore ?? scoreForReason(primaryReason);
-  const riskLevel =
-    primaryItem?.riskLevel ?? riskUiForReason(primaryReason);
+  const riskLevel = primaryItem?.riskLevel ?? riskUiForReason(primaryReason);
 
   return {
     id: returnRequest.id,

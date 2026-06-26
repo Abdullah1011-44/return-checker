@@ -171,7 +171,10 @@ async function loadMerchantForSync(merchantId) {
     });
   }
 
-  if (!merchant.shopifyAccessToken || merchant.shopifyAccessToken.trim() === "") {
+  if (
+    !merchant.shopifyAccessToken ||
+    merchant.shopifyAccessToken.trim() === ""
+  ) {
     throw new ShopifySyncRunnerError("Merchant missing Shopify access token", {
       code: "MERCHANT_MISSING_ACCESS_TOKEN",
       merchantId: merchant.id,
@@ -204,7 +207,8 @@ export async function findActiveMerchantsForSync(limit) {
 
   return merchants.filter(
     (merchant) =>
-      typeof merchant.shopDomain === "string" && merchant.shopDomain.trim() !== ""
+      typeof merchant.shopDomain === "string" &&
+      merchant.shopDomain.trim() !== "",
   );
 }
 
@@ -223,7 +227,7 @@ export async function runShopifySyncForMerchant({ merchantId, reason } = {}) {
     sanitizeAuditMetadata({
       merchantId: merchantId ?? null,
       reason: reason ?? null,
-    })
+    }),
   );
 
   let merchant;
@@ -238,7 +242,7 @@ export async function runShopifySyncForMerchant({ merchantId, reason } = {}) {
         merchantId: merchantId ?? null,
         code: sanitized.code,
         message: sanitized.message,
-      })
+      }),
     );
     throw sanitized;
   }
@@ -277,7 +281,7 @@ export async function runShopifySyncForMerchant({ merchantId, reason } = {}) {
         ordersSynced: summary.ordersSynced,
         productsSynced: summary.productsSynced,
         statusUpdated: summary.statusUpdated,
-      })
+      }),
     );
 
     return summary;
@@ -295,7 +299,7 @@ export async function runShopifySyncForMerchant({ merchantId, reason } = {}) {
         reason: reason ?? null,
         code: sanitized.code,
         message: sanitized.message,
-      })
+      }),
     );
 
     throw sanitized;

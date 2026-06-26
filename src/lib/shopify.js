@@ -6,8 +6,7 @@ import { optionalEnv, requireEnv } from "@/lib/env";
 let shopify = null;
 
 function resolveAppUrl() {
-  const appUrl =
-    optionalEnv("SHOPIFY_APP_URL") || optionalEnv("APP_URL");
+  const appUrl = optionalEnv("SHOPIFY_APP_URL") || optionalEnv("APP_URL");
 
   if (!appUrl) {
     requireEnv("SHOPIFY_APP_URL");

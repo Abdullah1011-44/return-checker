@@ -25,8 +25,10 @@ vi.mock("@/lib/sentry", () => ({
   captureException: vi.fn(),
 }));
 
-import { POST } from "@/app/api/webhooks/orders-create/route";
-import { extractSafeShopifyOrderFields } from "@/app/api/webhooks/orders-create/route";
+import {
+  extractSafeShopifyOrderFields,
+  POST,
+} from "@/app/api/webhooks/orders-create/route";
 
 describe("orders-create webhook route", () => {
   beforeEach(() => {
@@ -71,7 +73,7 @@ describe("orders-create webhook route", () => {
         created_at: "2026-06-16T12:00:00Z",
         email: "secret@example.com",
         customer: { first_name: "Jane" },
-      })
+      }),
     ).toEqual({
       shopifyOrderId: "5001",
       orderNumber: "5001",
@@ -96,7 +98,7 @@ describe("orders-create webhook route", () => {
       new Request("http://localhost/api/webhooks/orders-create", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(401);
@@ -111,7 +113,7 @@ describe("orders-create webhook route", () => {
       new Request("http://localhost/api/webhooks/orders-create", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -124,7 +126,7 @@ describe("orders-create webhook route", () => {
       new Request("http://localhost/api/webhooks/orders-create", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -153,7 +155,7 @@ describe("orders-create webhook route", () => {
           orderNumber: "5001",
           source: "shopify_webhook",
         },
-      })
+      }),
     );
   });
 
@@ -182,7 +184,7 @@ describe("orders-create webhook route", () => {
       new Request("http://localhost/api/webhooks/orders-create", {
         method: "POST",
         body: "{}",
-      })
+      }),
     );
 
     expect(response.status).toBe(200);

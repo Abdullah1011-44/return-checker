@@ -134,7 +134,9 @@ function StatCard({ label, value, sub, accent }) {
       <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">
         {label}
       </p>
-      <p className={`text-3xl font-bold leading-none ${accent ?? "text-slate-900"}`}>
+      <p
+        className={`text-3xl font-bold leading-none ${accent ?? "text-slate-900"}`}
+      >
         {value}
       </p>
       {sub && <p className="text-xs text-slate-400 mt-2">{sub}</p>}
@@ -223,13 +225,13 @@ export default function AnalyticsPage() {
     requests,
     "reason",
     reasonLabels,
-    ALL_REASONS
+    ALL_REASONS,
   );
   const optionBreakdown = buildBreakdown(
     requests,
     "selectedOption",
     null,
-    ALL_OPTIONS
+    ALL_OPTIONS,
   );
 
   return (
@@ -243,7 +245,6 @@ export default function AnalyticsPage() {
       }}
     >
       <div className="max-w-5xl mx-auto">
-
         {/* Header */}
         <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
           <div>
@@ -349,7 +350,7 @@ export default function AnalyticsPage() {
                 label="Most Common Return Reason"
                 value={
                   topReason.key
-                    ? reasonLabels[topReason.key] ?? topReason.key
+                    ? (reasonLabels[topReason.key] ?? topReason.key)
                     : "—"
                 }
                 detail={

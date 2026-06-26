@@ -30,7 +30,7 @@ export async function PATCH(request) {
     if (!id) {
       return NextResponse.json(
         { success: false, message: "Request ID is required." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -48,7 +48,7 @@ export async function PATCH(request) {
     if (!existing) {
       return NextResponse.json(
         { success: false, message: "Request not found." },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -132,7 +132,7 @@ export async function PATCH(request) {
     console.error("[PATCH /api/update-request]", error);
     return NextResponse.json(
       { success: false, message: "Something went wrong." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -137,7 +137,7 @@ export function findMockOrder(orderNumber, email) {
   return mockOrders.find(
     (order) =>
       order.orderNumber === cleanOrderNumber &&
-      order.email.toLowerCase() === email.toLowerCase()
+      order.email.toLowerCase() === email.toLowerCase(),
   );
 }
 

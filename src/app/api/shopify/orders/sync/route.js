@@ -22,10 +22,8 @@ import {
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { captureException } from "@/lib/sentry";
-import {
-  getMerchantSyncAuditContext,
-} from "@/lib/syncShopifyOrders";
 import { queueShopifySyncForMerchant } from "@/lib/shopifySyncQueue";
+import { getMerchantSyncAuditContext } from "@/lib/syncShopifyOrders";
 
 function isProtectedCustomerDataError(error) {
   return (
@@ -143,7 +141,7 @@ async function handleShopifySyncRouteError(error, meta = {}) {
         endpoint: error?.endpoint ?? null,
         httpStatus: 403,
         code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
-      })
+      }),
     );
 
     await safeCreateAdminAuditLog({
@@ -170,7 +168,7 @@ async function handleShopifySyncRouteError(error, meta = {}) {
       {
         nextStep:
           "Go to Shopify Partner Dashboard > App > API access > Protected customer data access, request access, make sure read_orders is included, then reinstall the app.",
-      }
+      },
     );
   }
 
@@ -184,7 +182,7 @@ async function handleShopifySyncRouteError(error, meta = {}) {
       actorType: AUDIT_ACTORS.SYSTEM,
       code,
       httpStatus,
-    })
+    }),
   );
 
   await safeCreateAdminAuditLog({
@@ -210,7 +208,7 @@ async function handleShopifySyncRouteError(error, meta = {}) {
     return createApiErrorResponse(
       "Shopify permission required",
       httpStatus,
-      "SHOPIFY_PERMISSION_REQUIRED"
+      "SHOPIFY_PERMISSION_REQUIRED",
     );
   }
 
@@ -218,7 +216,7 @@ async function handleShopifySyncRouteError(error, meta = {}) {
     return createApiErrorResponse(
       "Shopify rate limit reached. Please try again later.",
       429,
-      "SHOPIFY_RATE_LIMIT"
+      "SHOPIFY_RATE_LIMIT",
     );
   }
 
@@ -226,7 +224,7 @@ async function handleShopifySyncRouteError(error, meta = {}) {
     return createApiErrorResponse(
       "Shopify is temporarily unavailable. Please try again later.",
       502,
-      "SHOPIFY_UNAVAILABLE"
+      "SHOPIFY_UNAVAILABLE",
     );
   }
 
@@ -234,7 +232,7 @@ async function handleShopifySyncRouteError(error, meta = {}) {
     return createApiErrorResponse(
       "Unable to connect to Shopify. Please try again.",
       503,
-      "SHOPIFY_CONNECTION_ERROR"
+      "SHOPIFY_CONNECTION_ERROR",
     );
   }
 
@@ -294,7 +292,7 @@ export async function POST(request) {
       AUDIT_EVENTS.SHOPIFY_SYNC_STARTED,
       buildSyncAuditMeta(syncContext, {
         actorType: AUDIT_ACTORS.SYSTEM,
-      })
+      }),
     );
 
     await safeCreateAdminAuditLog({
@@ -315,7 +313,7 @@ export async function POST(request) {
       return createApiErrorResponse(
         "Missing Shopify connection",
         400,
-        "MISSING_SHOPIFY_CONNECTION"
+        "MISSING_SHOPIFY_CONNECTION",
       );
     }
 
@@ -330,7 +328,7 @@ export async function POST(request) {
         actorType: AUDIT_ACTORS.SYSTEM,
         queued: true,
         requestedAt: queueResult.requestedAt,
-      })
+      }),
     );
 
     await safeCreateAdminAuditLog({

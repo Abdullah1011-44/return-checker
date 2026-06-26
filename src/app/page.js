@@ -16,10 +16,26 @@ function StepBadge({ step, label }) {
 }
 
 const RESOLUTION_OPTIONS = [
-  { label: "Exchange Product", icon: "🔄", desc: "Swap for a different size or colour" },
-  { label: "Store Credit", icon: "💳", desc: "Credit added to your account instantly" },
-  { label: "Partial Refund", icon: "💸", desc: "Keep the item, get money back" },
-  { label: "Manual Review", icon: "🔎", desc: "Our team will personally investigate" },
+  {
+    label: "Exchange Product",
+    icon: "🔄",
+    desc: "Swap for a different size or colour",
+  },
+  {
+    label: "Store Credit",
+    icon: "💳",
+    desc: "Credit added to your account instantly",
+  },
+  {
+    label: "Partial Refund",
+    icon: "💸",
+    desc: "Keep the item, get money back",
+  },
+  {
+    label: "Manual Review",
+    icon: "🔎",
+    desc: "Our team will personally investigate",
+  },
 ];
 
 function createEmptyItemDetail() {
@@ -73,7 +89,7 @@ export default function Home() {
       } else {
         setError(
           data.message ||
-            "Order not found. Please check your order number and email."
+            "Order not found. Please check your order number and email.",
         );
       }
     } catch {
@@ -88,7 +104,7 @@ export default function Home() {
     setSelectedItemIds((prev) =>
       prev.includes(item.id)
         ? prev.filter((id) => id !== item.id)
-        : [...prev, item.id]
+        : [...prev, item.id],
     );
   }
 
@@ -160,7 +176,7 @@ export default function Home() {
 
   function getSelectedOrderItems() {
     return (orderData?.items || []).filter((item) =>
-      selectedItemIds.includes(item.id)
+      selectedItemIds.includes(item.id),
     );
   }
 
@@ -222,7 +238,7 @@ export default function Home() {
             duplicateTitles
               ? `Return already requested for: ${duplicateTitles}`
               : data.message ||
-                  "One or more selected items already have an active return request."
+                  "One or more selected items already have an active return request.",
           );
           return;
         }
@@ -230,7 +246,7 @@ export default function Home() {
         if (data.error === "DUPLICATE_ITEM_IDS_IN_REQUEST") {
           setError(
             data.message ||
-              "The same item cannot be submitted more than once in a single request."
+              "The same item cannot be submitted more than once in a single request.",
           );
           return;
         }
@@ -280,13 +296,13 @@ export default function Home() {
       className="min-h-screen flex items-center justify-center px-4 py-12"
       style={{
         backgroundColor: "#f8fafc",
-        backgroundImage: "radial-gradient(circle, #cbd5e1 1px, transparent 1px)",
+        backgroundImage:
+          "radial-gradient(circle, #cbd5e1 1px, transparent 1px)",
         backgroundSize: "24px 24px",
       }}
     >
       <div className={`w-full ${step === "details" ? "max-w-lg" : "max-w-md"}`}>
         <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/80 overflow-hidden">
-
           {/* Header */}
           <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-8 py-6 relative overflow-hidden">
             <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
@@ -308,7 +324,6 @@ export default function Home() {
           </div>
 
           <div className="px-8 py-8">
-
             {/* ── STEP 1: Order lookup ── */}
             {step === "check" && (
               <form onSubmit={handleCheck} className="space-y-5">
@@ -355,24 +370,28 @@ export default function Home() {
                   disabled={loading}
                   className="w-full bg-slate-800 hover:bg-slate-700 active:scale-[0.98] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-2.5 text-sm shadow-md shadow-slate-800/20"
                 >
-                  {loading ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      Checking…
-                    </>
-                  ) : (
-                    <>Check Return Eligibility <span className="opacity-70">→</span></>
-                  )}
+                  {loading
+                    ? <>
+                        <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        Checking…
+                      </>
+                    : <>
+                        Check Return Eligibility{" "}
+                        <span className="opacity-70">→</span>
+                      </>}
                 </button>
 
                 <p className="text-center text-xs text-slate-400 pt-1">
                   Try orders{" "}
                   <span className="font-medium text-slate-500">1001</span> /{" "}
-                  <span className="font-medium text-slate-500">test1@gmail.com</span>
-                  {" "}or{" "}
-                  <span className="font-medium text-slate-500">1002</span> /{" "}
-                  <span className="font-medium text-slate-500">test2@gmail.com</span>
-                  {" "}(mixed eligibility)
+                  <span className="font-medium text-slate-500">
+                    test1@gmail.com
+                  </span>{" "}
+                  or <span className="font-medium text-slate-500">1002</span> /{" "}
+                  <span className="font-medium text-slate-500">
+                    test2@gmail.com
+                  </span>{" "}
+                  (mixed eligibility)
                 </p>
               </form>
             )}
@@ -383,14 +402,17 @@ export default function Home() {
                 <StepBadge step="2" label="Select items to return" />
 
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <p className="text-sm font-semibold text-emerald-800">Order found</p>
+                  <p className="text-sm font-semibold text-emerald-800">
+                    Order found
+                  </p>
                   <p className="text-xs text-emerald-700 mt-1">
                     Order #{orderData.orderNumber} · {orderData.customerEmail}
                   </p>
                 </div>
 
                 <p className="text-sm text-slate-600">
-                  Select the items you want to return. Only eligible items can be selected.
+                  Select the items you want to return. Only eligible items can
+                  be selected.
                 </p>
 
                 <div className="space-y-3">
@@ -404,44 +426,50 @@ export default function Home() {
                         disabled={!item.eligible}
                         onClick={() => toggleItemSelection(item)}
                         className={`w-full text-left border rounded-xl p-4 transition-all duration-150
-                          ${!item.eligible
-                            ? "border-slate-200 bg-slate-50 opacity-70 cursor-not-allowed"
-                            : isSelected
-                              ? "border-slate-800 bg-slate-800 text-white shadow-md shadow-slate-800/20"
-                              : "border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50"
+                          ${
+                            !item.eligible
+                              ? "border-slate-200 bg-slate-50 opacity-70 cursor-not-allowed"
+                              : isSelected
+                                ? "border-slate-800 bg-slate-800 text-white shadow-md shadow-slate-800/20"
+                                : "border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50"
                           }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
-                            <p className={`text-sm font-semibold ${isSelected ? "text-white" : "text-slate-800"}`}>
+                            <p
+                              className={`text-sm font-semibold ${isSelected ? "text-white" : "text-slate-800"}`}
+                            >
                               {item.title}
                             </p>
-                            <p className={`text-xs mt-1 ${isSelected ? "text-slate-300" : "text-slate-500"}`}>
-                              SKU: {item.sku} · Qty: {item.quantity} · ${item.price.toFixed(2)}
+                            <p
+                              className={`text-xs mt-1 ${isSelected ? "text-slate-300" : "text-slate-500"}`}
+                            >
+                              SKU: {item.sku} · Qty: {item.quantity} · $
+                              {item.price.toFixed(2)}
                             </p>
                             {!item.eligible && item.ineligibleReason && (
                               <p className="text-xs text-red-600 mt-2 font-medium">
-                                {item.duplicateReturnMessage || item.ineligibleReason}
+                                {item.duplicateReturnMessage ||
+                                  item.ineligibleReason}
                               </p>
                             )}
                           </div>
-                          {item.eligible ? (
-                            <span
-                              className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0
-                                ${isSelected
-                                  ? "bg-white/20 text-white"
-                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          {item.eligible
+                            ? <span
+                                className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0
+                                ${
+                                  isSelected
+                                    ? "bg-white/20 text-white"
+                                    : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                 }`}
-                            >
-                              {isSelected ? "Selected" : "Eligible"}
-                            </span>
-                          ) : (
-                            <span className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 bg-red-50 text-red-700 border border-red-200">
-                              {item.alreadyReturnRequested
-                                ? "Return requested"
-                                : "Not eligible"}
-                            </span>
-                          )}
+                              >
+                                {isSelected ? "Selected" : "Eligible"}
+                              </span>
+                            : <span className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 bg-red-50 text-red-700 border border-red-200">
+                                {item.alreadyReturnRequested
+                                  ? "Return requested"
+                                  : "Not eligible"}
+                              </span>}
                         </div>
                       </button>
                     );
@@ -467,7 +495,8 @@ export default function Home() {
                   className="w-full bg-slate-800 hover:bg-slate-700 active:scale-[0.98] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-2.5 text-sm shadow-md shadow-slate-800/20"
                 >
                   Continue with {selectedItemIds.length || 0} item
-                  {selectedItemIds.length === 1 ? "" : "s"} <span className="opacity-70">→</span>
+                  {selectedItemIds.length === 1 ? "" : "s"}{" "}
+                  <span className="opacity-70">→</span>
                 </button>
 
                 <button
@@ -495,7 +524,8 @@ export default function Home() {
                 </p>
 
                 {getSelectedOrderItems().map((item) => {
-                  const details = itemDetails[item.id] || createEmptyItemDetail();
+                  const details =
+                    itemDetails[item.id] || createEmptyItemDetail();
 
                   return (
                     <div
@@ -503,9 +533,12 @@ export default function Home() {
                       className="border border-slate-200 rounded-xl p-4 space-y-4 bg-slate-50"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">{item.title}</p>
+                        <p className="text-sm font-semibold text-slate-800">
+                          {item.title}
+                        </p>
                         <p className="text-xs text-slate-500 mt-1">
-                          SKU: {item.sku} · Qty: {item.quantity} · ${item.price.toFixed(2)}
+                          SKU: {item.sku} · Qty: {item.quantity} · $
+                          {item.price.toFixed(2)}
                         </p>
                       </div>
 
@@ -516,7 +549,11 @@ export default function Home() {
                         <select
                           value={details.returnReason}
                           onChange={(e) =>
-                            updateItemDetail(item.id, "returnReason", e.target.value)
+                            updateItemDetail(
+                              item.id,
+                              "returnReason",
+                              e.target.value,
+                            )
                           }
                           className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent transition-all duration-150 appearance-none cursor-pointer"
                           style={{
@@ -552,13 +589,16 @@ export default function Home() {
                       <div className="space-y-2">
                         <label className="block text-sm font-semibold text-slate-700">
                           Upload Proof Image{" "}
-                          <span className="text-slate-400 font-normal">(optional)</span>
+                          <span className="text-slate-400 font-normal">
+                            (optional)
+                          </span>
                         </label>
                         <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer bg-white hover:bg-slate-100 hover:border-slate-300 transition-all duration-150">
                           <div className="flex flex-col items-center justify-center gap-1 text-slate-400">
                             <span className="text-xl">📷</span>
                             <span className="text-xs font-medium">
-                              {details.proofImageName || "Click to upload a photo"}
+                              {details.proofImageName ||
+                                "Click to upload a photo"}
                             </span>
                           </div>
                           <input
@@ -598,22 +638,29 @@ export default function Home() {
                               updateItemDetail(item.id, "selectedOption", label)
                             }
                             className={`w-full border rounded-xl px-4 py-3 text-left transition-all duration-150 flex items-center gap-3
-                              ${details.selectedOption === label
-                                ? "border-slate-800 bg-slate-800 text-white shadow-md shadow-slate-800/20"
-                                : "border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50 text-slate-700"
+                              ${
+                                details.selectedOption === label
+                                  ? "border-slate-800 bg-slate-800 text-white shadow-md shadow-slate-800/20"
+                                  : "border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50 text-slate-700"
                               }`}
                           >
                             <span className="text-lg leading-none">{icon}</span>
                             <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-semibold leading-tight ${details.selectedOption === label ? "text-white" : "text-slate-800"}`}>
+                              <p
+                                className={`text-sm font-semibold leading-tight ${details.selectedOption === label ? "text-white" : "text-slate-800"}`}
+                              >
                                 {label}
                               </p>
-                              <p className={`text-xs mt-0.5 ${details.selectedOption === label ? "text-slate-300" : "text-slate-400"}`}>
+                              <p
+                                className={`text-xs mt-0.5 ${details.selectedOption === label ? "text-slate-300" : "text-slate-400"}`}
+                              >
                                 {desc}
                               </p>
                             </div>
                             {details.selectedOption === label && (
-                              <span className="text-white text-sm font-bold ml-auto">✓</span>
+                              <span className="text-white text-sm font-bold ml-auto">
+                                ✓
+                              </span>
                             )}
                           </button>
                         ))}
@@ -633,14 +680,15 @@ export default function Home() {
                   disabled={loading}
                   className="w-full bg-slate-800 hover:bg-slate-700 active:scale-[0.98] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-2.5 text-sm shadow-md shadow-slate-800/20"
                 >
-                  {loading ? (
-                    <>
-                      <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      Submitting…
-                    </>
-                  ) : (
-                    <>Submit Return Request <span className="opacity-70">→</span></>
-                  )}
+                  {loading
+                    ? <>
+                        <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        Submitting…
+                      </>
+                    : <>
+                        Submit Return Request{" "}
+                        <span className="opacity-70">→</span>
+                      </>}
                 </button>
 
                 <button
@@ -668,7 +716,8 @@ export default function Home() {
                       Request submitted successfully
                     </p>
                     <p className="text-xs text-emerald-600 mt-1 leading-relaxed">
-                      The merchant will review your return request and contact you by email.
+                      The merchant will review your return request and contact
+                      you by email.
                     </p>
                   </div>
                 </div>
@@ -676,15 +725,21 @@ export default function Home() {
                 <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Order</span>
-                    <span className="font-semibold text-slate-800">#{orderNumber}</span>
+                    <span className="font-semibold text-slate-800">
+                      #{orderNumber}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Email</span>
-                    <span className="font-semibold text-slate-800 truncate max-w-[180px]">{email}</span>
+                    <span className="font-semibold text-slate-800 truncate max-w-[180px]">
+                      {email}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Items returned</span>
-                    <span className="font-semibold text-slate-800">{submittedItems.length}</span>
+                    <span className="font-semibold text-slate-800">
+                      {submittedItems.length}
+                    </span>
                   </div>
                 </div>
 
@@ -694,18 +749,24 @@ export default function Home() {
                       key={item.itemId}
                       className="rounded-xl border border-slate-200 bg-white p-4 text-sm space-y-1"
                     >
-                      <p className="font-semibold text-slate-800">{item.title}</p>
+                      <p className="font-semibold text-slate-800">
+                        {item.title}
+                      </p>
                       <p className="text-xs text-slate-500">
-                        SKU: {item.sku} · Qty: {item.quantity} · ${item.price.toFixed(2)}
+                        SKU: {item.sku} · Qty: {item.quantity} · $
+                        {item.price.toFixed(2)}
                       </p>
                       <p className="text-xs text-slate-600">
-                        Reason: {reasonLabels[item.returnReason] ?? item.returnReason}
+                        Reason:{" "}
+                        {reasonLabels[item.returnReason] ?? item.returnReason}
                       </p>
                       <p className="text-xs text-slate-600">
                         Resolution: {item.selectedOption}
                       </p>
                       {item.proofImageName && (
-                        <p className="text-xs text-slate-500">Proof: {item.proofImageName}</p>
+                        <p className="text-xs text-slate-500">
+                          Proof: {item.proofImageName}
+                        </p>
                       )}
                     </div>
                   ))}
@@ -722,24 +783,31 @@ export default function Home() {
                     onClick={handleReset}
                     className="w-full py-3 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98] text-slate-600 hover:text-slate-800 text-sm font-semibold transition-all duration-150 flex items-center justify-center gap-2 group"
                   >
-                    <span className="group-hover:-translate-x-0.5 transition-transform duration-150">←</span>
+                    <span className="group-hover:-translate-x-0.5 transition-transform duration-150">
+                      ←
+                    </span>
                     Check Another Return
                   </button>
                 </div>
               </div>
             )}
-
           </div>
         </div>
 
         <p className="text-center text-xs text-slate-400 mt-5">
           Already submitted a return?{" "}
-          <a href="/status" className="underline hover:text-slate-600 transition-colors">
+          <a
+            href="/status"
+            className="underline hover:text-slate-600 transition-colors"
+          >
             Track Return Status
           </a>
           {" · "}
           Need help?{" "}
-          <a href="#" className="underline hover:text-slate-600 transition-colors">
+          <a
+            href="#"
+            className="underline hover:text-slate-600 transition-colors"
+          >
             Contact support
           </a>
         </p>

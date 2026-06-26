@@ -33,7 +33,7 @@ export function getItemRecommendedAction(returnReason) {
 
 function getRequestBestAction(items) {
   const recommendations = items.map((item) =>
-    getItemRecommendedAction(item.returnReason)
+    getItemRecommendedAction(item.returnReason),
   );
   const unique = [...new Set(recommendations.filter(Boolean))];
 
@@ -47,7 +47,7 @@ function getPrimaryReason(items) {
   const scores = items.map((item) => scoreMap[item.returnReason] ?? 60);
   const lowestScore = Math.min(...scores);
   const primary = items.find(
-    (item) => (scoreMap[item.returnReason] ?? 60) === lowestScore
+    (item) => (scoreMap[item.returnReason] ?? 60) === lowestScore,
   );
   return primary?.returnReason || items[0].returnReason || "other";
 }
@@ -66,7 +66,8 @@ function normalizeReturnRequestItem(item) {
     selectedOption: item.selectedOption || "",
     proofImageName: item.proofImageName || "",
     proofImage: item.proofImage || "",
-    recommendedAction: item.recommendedAction || getItemRecommendedAction(returnReason),
+    recommendedAction:
+      item.recommendedAction || getItemRecommendedAction(returnReason),
   };
 }
 
@@ -89,7 +90,11 @@ function mapToSelectedItems(returnRequestItems) {
   });
 }
 
-export function buildReturnRequest({ orderNumber, email, returnRequestItems = [] }) {
+export function buildReturnRequest({
+  orderNumber,
+  email,
+  returnRequestItems = [],
+}) {
   const normalizedItems = returnRequestItems.map(normalizeReturnRequestItem);
   const selectedItems = mapToSelectedItems(normalizedItems);
   const primaryReason = getPrimaryReason(normalizedItems);

@@ -45,7 +45,7 @@ async function seedMerchantOrders(prisma, merchant, orders = seedOrders) {
     if (existing) {
       skipped += 1;
       console.log(
-        `  Skip order #${order.orderNumber} · ${order.email} (already exists)`
+        `  Skip order #${order.orderNumber} · ${order.email} (already exists)`,
       );
       continue;
     }
@@ -59,7 +59,7 @@ async function seedMerchantOrders(prisma, merchant, orders = seedOrders) {
 
     created += 1;
     console.log(
-      `  Created order #${order.orderNumber} · ${order.email} · ${order.items.length} items`
+      `  Created order #${order.orderNumber} · ${order.email} · ${order.items.length} items`,
     );
   }
 

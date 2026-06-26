@@ -54,7 +54,7 @@ export async function GET(request) {
     console.error("[GET /api/requests]", error);
     return NextResponse.json(
       { success: false, message: "Failed to load return requests." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

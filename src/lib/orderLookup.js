@@ -4,11 +4,8 @@ import {
   duplicateItemsToMap,
   findDuplicateReturnItems,
 } from "@/lib/duplicateReturnPrevention";
-import {
-  normalizeEmail,
-  normalizeOrderNumber,
-} from "@/lib/returnApiMappers";
 import { prisma } from "@/lib/prisma";
+import { normalizeEmail, normalizeOrderNumber } from "@/lib/returnApiMappers";
 
 /** Shared merchant resolution for customer portal APIs. */
 export async function resolveMerchantForCustomerFlow() {
@@ -89,8 +86,8 @@ export async function buildOrderCheckApiResponse(order, prismaClient = prisma) {
   const items = (order.items ?? []).map((item) =>
     applyDuplicateFlagsToCheckItem(
       mapOrderItemToCheckItem(item, order, order.merchant),
-      duplicateByOrderItemId.get(item.id)
-    )
+      duplicateByOrderItemId.get(item.id),
+    ),
   );
   const orderEligible = items.some((item) => item.eligible);
 

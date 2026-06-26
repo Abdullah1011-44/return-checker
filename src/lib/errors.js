@@ -44,7 +44,7 @@ export function createApiErrorResponse(
   message,
   status = 500,
   code = "INTERNAL_ERROR",
-  extra = {}
+  extra = {},
 ) {
   return NextResponse.json(
     {
@@ -53,7 +53,7 @@ export function createApiErrorResponse(
       code,
       ...extra,
     },
-    { status }
+    { status },
   );
 }
 
@@ -62,7 +62,7 @@ export function createApiErrorResponse(
  */
 export function safeErrorMessage(
   error,
-  fallback = "Something went wrong. Please try again."
+  fallback = "Something went wrong. Please try again.",
 ) {
   if (error instanceof AppError) {
     return error.message;
@@ -126,7 +126,11 @@ export function handleApiError(error, options = {}) {
 
   if (isPrismaKnownRequestError(error)) {
     if (error.code === "P2002") {
-      return createApiErrorResponse("Duplicate record", 409, "DUPLICATE_RECORD");
+      return createApiErrorResponse(
+        "Duplicate record",
+        409,
+        "DUPLICATE_RECORD",
+      );
     }
     if (error.code === "P2025") {
       return createApiErrorResponse("Record not found", 404, "NOT_FOUND");

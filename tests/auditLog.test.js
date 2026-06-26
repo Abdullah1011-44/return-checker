@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  AUDIT_ACTORS,
-  AUDIT_EVENTS,
-  createAuditEvent,
-  safeCreateAuditEvent,
-} from "@/lib/audit";
-import {
   ADMIN_AUDIT_ACTORS,
   ADMIN_AUDIT_EVENTS,
   createAdminAuditLog,
   logOrderStatusUpdated,
   safeCreateAdminAuditLog,
 } from "@/lib/adminAudit";
+import {
+  AUDIT_ACTORS,
+  AUDIT_EVENTS,
+  createAuditEvent,
+  safeCreateAuditEvent,
+} from "@/lib/audit";
 import { mockPrisma } from "./helpers/mockPrisma.js";
 
 describe("audit logging", () => {
@@ -125,7 +125,7 @@ describe("audit logging", () => {
         orderId: "order-1",
         oldStatus: "PENDING",
         newStatus: "PAID",
-      }
+      },
     );
 
     auditInfoSpy.mockRestore();
@@ -144,8 +144,12 @@ describe("audit logging", () => {
   });
 
   it("does not crash main action when audit persistence fails", async () => {
-    mockPrisma.returnEvent.create.mockRejectedValue(new Error("database unavailable"));
-    mockPrisma.adminAuditLog.create.mockRejectedValue(new Error("database unavailable"));
+    mockPrisma.returnEvent.create.mockRejectedValue(
+      new Error("database unavailable"),
+    );
+    mockPrisma.adminAuditLog.create.mockRejectedValue(
+      new Error("database unavailable"),
+    );
 
     const returnAuditWarn = vi
       .spyOn(console, "warn")
@@ -172,10 +176,10 @@ describe("audit logging", () => {
     expect(actionResult).toEqual({ success: true });
     expect(mainAction).toHaveBeenCalledOnce();
     expect(returnAuditWarn).toHaveBeenCalledWith(
-      "[Audit] Failed to create audit event"
+      "[Audit] Failed to create audit event",
     );
     expect(returnAuditWarn).toHaveBeenCalledWith(
-      "[AdminAudit] Failed to create admin audit log"
+      "[AdminAudit] Failed to create admin audit log",
     );
 
     returnAuditWarn.mockRestore();

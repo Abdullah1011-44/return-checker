@@ -30,11 +30,14 @@ describe("shopifyWebhooks", () => {
 
   it("normalizes APP_URL trailing slashes", () => {
     expect(normalizeAppUrl("https://app.example.com/")).toBe(
-      "https://app.example.com"
+      "https://app.example.com",
     );
-    expect(buildWebhookAddress("https://app.example.com", "/api/webhooks/orders-create")).toBe(
-      "https://app.example.com/api/webhooks/orders-create"
-    );
+    expect(
+      buildWebhookAddress(
+        "https://app.example.com",
+        "/api/webhooks/orders-create",
+      ),
+    ).toBe("https://app.example.com/api/webhooks/orders-create");
   });
 
   it("returns failed result when APP_URL is missing", async () => {
@@ -61,7 +64,7 @@ describe("shopifyWebhooks", () => {
 
     expect(result.success).toBe(false);
     expect(result.failed[0]?.reason).toBe(
-      "APP_URL points to localhost outside development"
+      "APP_URL points to localhost outside development",
     );
     expect(mockShopifyAdminRequest).not.toHaveBeenCalled();
   });
@@ -105,16 +108,21 @@ describe("shopifyWebhooks", () => {
           },
         ],
         "orders/updated",
-        "https://app.example.com/api/webhooks/orders-updated"
-      )
+        "https://app.example.com/api/webhooks/orders-updated",
+      ),
     ).toBe(true);
 
     expect(
       webhookAlreadyExists(
-        [{ topic: "orders/updated", address: "https://other.example.com/hook" }],
+        [
+          {
+            topic: "orders/updated",
+            address: "https://other.example.com/hook",
+          },
+        ],
         "orders/updated",
-        "https://app.example.com/api/webhooks/orders-updated"
-      )
+        "https://app.example.com/api/webhooks/orders-updated",
+      ),
     ).toBe(false);
   });
 

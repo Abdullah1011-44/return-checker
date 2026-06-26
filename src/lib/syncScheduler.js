@@ -4,9 +4,14 @@ import {
   ADMIN_AUDIT_SEVERITY,
   safeCreateAdminAuditLog,
 } from "@/lib/adminAudit";
-import { AUDIT_ACTORS, AUDIT_EVENTS, logAuditInfo, sanitizeAuditMetadata } from "@/lib/audit";
-import { findActiveMerchantsForSync } from "@/lib/shopifySyncRunner";
+import {
+  AUDIT_ACTORS,
+  AUDIT_EVENTS,
+  logAuditInfo,
+  sanitizeAuditMetadata,
+} from "@/lib/audit";
 import { queueShopifySyncForMerchant } from "@/lib/shopifySyncQueue";
+import { findActiveMerchantsForSync } from "@/lib/shopifySyncRunner";
 
 const DEFAULT_MERCHANT_LIMIT = 10;
 const MAX_MERCHANT_LIMIT = 25;
