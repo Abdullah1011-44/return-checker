@@ -7,6 +7,10 @@ import {
   resolveMerchantForCustomerFlow,
 } from "@/lib/orderLookup";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import {
+  evaluateReturnPolicyForCheck,
+  serializePolicyResultForApi,
+} from "@/lib/returnPolicyIntegration";
 import { captureException } from "@/lib/sentry";
 import {
   checkReturnSchema,
@@ -49,7 +53,18 @@ export async function POST(request) {
     });
 
     if (order) {
-      return Response.json(await buildOrderCheckApiResponse(order));
+      const orderCheck = await buildOrderCheckApiResponse(order);
+      const policyResult = await evaluateReturnPolicyForCheck({
+        merchantId: order.merchantId,
+        merchant: order.merchant,
+        order,
+      });
+
+      // TODO: Persist policyResult after schema support is added.
+      return Response.json({
+        ...orderCheck,
+        policyResult: serializePolicyResultForApi(policyResult),
+      });
     }
 
     // Merchant session: never fall back to demo mock data

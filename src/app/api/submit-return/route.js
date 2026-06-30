@@ -20,8 +20,12 @@ import {
   mapReturnReason,
 } from "@/lib/returnApiMappers";
 import {
-  bestActionForReason,
-  buildAiSummary,
+  buildPolicySummary,
+  evaluateReturnPolicyForSubmission,
+  policyDecisionToBestAction,
+  serializePolicyResultForApi,
+} from "@/lib/returnPolicyIntegration";
+import {
   reasonKeyFromUiOrPrisma,
   resolveRequestEligibility,
   riskPrismaForReason,
@@ -128,31 +132,6 @@ export async function POST(request) {
 
       resolvedOrderItemIds.push(orderItem.id);
       matchedOrderItems.push(orderItem);
-      const reasonKey = reasonKeyFromUiOrPrisma(item.returnReason);
-      const bestAction = bestActionForReason(reasonKey);
-      const now = new Date();
-
-      returnItemsCreate.push({
-        orderItemId: orderItem.id,
-        reason: mapReturnReason(item.returnReason),
-        comment: item.comment?.trim() || null,
-        selectedOption: mapRecoveryOption(item.selectedOption),
-        imageUrl: serializeProofImage(
-          item.proofImageName,
-          item.proofImage ?? item.imageUrl,
-        ),
-        imageMimeType: guessImageMimeType(item.proofImage ?? item.imageUrl),
-        recoveryScore: scoreForReason(reasonKey),
-        riskLevel: riskPrismaForReason(reasonKey),
-        bestAction,
-        aiSummary: buildAiSummary({
-          reasonKey,
-          selectedOptionLabel: item.selectedOption,
-          bestAction,
-        }),
-        aiClassifiedAt: now,
-        merchantDecision: "PENDING",
-      });
     }
 
     if (hasDuplicateOrderItemIds(resolvedOrderItemIds)) {
@@ -175,6 +154,49 @@ export async function POST(request) {
       windowExpiresAt.setDate(
         windowExpiresAt.getDate() + order.merchant.returnWindowDays,
       );
+    }
+
+    const policyResult = await evaluateReturnPolicyForSubmission({
+      merchantId,
+      merchant: order.merchant,
+      order,
+      matchedOrderItems,
+      returnRequestItems,
+      windowExpiresAt,
+    });
+
+    const recommendedBestAction = policyDecisionToBestAction(
+      policyResult.decision,
+    );
+    const now = new Date();
+
+    for (let index = 0; index < returnRequestItems.length; index += 1) {
+      const item = returnRequestItems[index];
+      const orderItem = matchedOrderItems[index];
+      const reasonKey = reasonKeyFromUiOrPrisma(item.returnReason);
+
+      returnItemsCreate.push({
+        orderItemId: orderItem.id,
+        reason: mapReturnReason(item.returnReason),
+        comment: item.comment?.trim() || null,
+        selectedOption: mapRecoveryOption(item.selectedOption),
+        imageUrl: serializeProofImage(
+          item.proofImageName,
+          item.proofImage ?? item.imageUrl,
+        ),
+        imageMimeType: guessImageMimeType(item.proofImage ?? item.imageUrl),
+        recoveryScore: scoreForReason(reasonKey),
+        riskLevel: riskPrismaForReason(reasonKey),
+        bestAction: recommendedBestAction,
+        aiSummary: buildPolicySummary({
+          decision: policyResult.decision,
+          customerMessage: policyResult.customerMessage,
+          reasonKey,
+          selectedOptionLabel: item.selectedOption,
+        }),
+        aiClassifiedAt: now,
+        merchantDecision: "PENDING",
+      });
     }
 
     const returnRequest = await prisma.$transaction(async (tx) => {
@@ -249,6 +271,9 @@ export async function POST(request) {
             riskLevel: ri.riskLevel,
             bestAction: ri.bestAction,
           })),
+          policyDecision: policyResult.decision,
+          policyConfidence: policyResult.confidence,
+          policyCustomerMessage: policyResult.customerMessage,
         },
       },
     });
@@ -256,7 +281,10 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       message: "Return request submitted successfully.",
+      customerMessage: policyResult.customerMessage,
       returnRequest: serializeReturnRequest(returnRequest),
+      // TODO: Persist policyResult after schema support is added.
+      policyResult: serializePolicyResultForApi(policyResult),
     });
   } catch (error) {
     if (error instanceof DuplicateReturnRequestError) {
