@@ -1,42 +1,7 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import RequestCard from "@/components/RequestCard";
-
-const REQUESTS_LOAD_TIMEOUT_MS = 30_000;
-
-async function fetchDashboardRequests(signal) {
-  const res = await fetch("/api/requests", {
-    method: "GET",
-    credentials: "same-origin",
-    cache: "no-store",
-    headers: { Accept: "application/json" },
-    signal,
-  });
-
-  let response = {};
-  try {
-    response = await res.json();
-  } catch {
-    response = {};
-  }
-
-  if (!res.ok || response?.success !== true) {
-    return {
-      ok: false,
-      requests: [],
-      message:
-        typeof response?.message === "string" && response.message
-          ? response.message
-          : "Failed to load return requests.",
-    };
-  }
-
-  return {
-    ok: true,
-    requests: Array.isArray(response.requests) ? response.requests : [],
-    message: "",
-  };
-}
+import { fetchMerchantJson, getApiErrorMessage } from "@/lib/dashboardFetch";
 
 const STATUS_FILTERS = [
   { id: "ALL", label: "All", statuses: null },
@@ -137,7 +102,6 @@ function sortRequests(requests, sortId) {
         const diff = riskSortRank(a, false) - riskSortRank(b, false);
         return diff !== 0 ? diff : byNewestTiebreak(a, b);
       });
-    case "NEWEST":
     default:
       return list.sort(byNewestTiebreak);
   }
@@ -206,7 +170,6 @@ export default function Dashboard() {
   const [productSyncMessage, setProductSyncMessage] = useState("");
   const [productSyncError, setProductSyncError] = useState("");
   const [productSyncWarnings, setProductSyncWarnings] = useState([]);
-  const loadAbortRef = useRef(null);
 
   const safeRequests = Array.isArray(requests) ? requests : [];
 
@@ -227,49 +190,42 @@ export default function Dashboard() {
   );
 
   const loadRequests = useCallback(async () => {
-    loadAbortRef.current?.abort();
-    const controller = new AbortController();
-    loadAbortRef.current = controller;
-
     setLoading(true);
     setLoadError("");
 
-    const safetyTimer = setTimeout(() => {
-      setLoading(false);
-    }, REQUESTS_LOAD_TIMEOUT_MS);
-
     try {
-      const result = await fetchDashboardRequests(controller.signal);
+      const { res, data, aborted } = await fetchMerchantJson("/api/requests");
 
-      if (controller.signal.aborted) {
-        return;
-      }
-
-      if (result.ok) {
-        setRequests(result.requests);
-        setLoadError("");
-      } else {
-        setLoadError(result.message);
+      if (aborted) {
+        setLoadError("Could not load return requests.");
         setRequests([]);
-      }
-    } catch (error) {
-      if (error?.name === "AbortError") {
         return;
       }
-      setLoadError("Failed to load return requests.");
+
+      if (!res?.ok || data?.success !== true) {
+        setLoadError(
+          getApiErrorMessage(res, data, "Could not load return requests."),
+        );
+        setRequests([]);
+        return;
+      }
+
+      const nextRequests = Array.isArray(data.requests) ? data.requests : [];
+      setRequests(nextRequests);
+      setLoadError("");
+    } catch (error) {
+      console.error("[dashboard] Failed to load return requests.", {
+        name: error instanceof Error ? error.name : "Error",
+      });
+      setLoadError("Could not load return requests.");
       setRequests([]);
     } finally {
-      clearTimeout(safetyTimer);
-
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadRequests();
-    return () => {
-      loadAbortRef.current?.abort();
-    };
   }, [loadRequests]);
 
   async function handleSyncShopifyOrders() {
@@ -669,8 +625,7 @@ export default function Dashboard() {
           {!loading &&
             !loadError &&
             displayRequests.map((request) => {
-              const risk =
-                riskConfig[request.riskLevel] ?? riskConfig["Medium"];
+              const risk = riskConfig[request.riskLevel] ?? riskConfig.Medium;
 
               return (
                 <RequestCard
@@ -692,12 +647,9 @@ export default function Dashboard() {
 
         <p className="text-center text-xs text-slate-400 mt-8">
           Powered by Return Recovery Copilot ·{" "}
-          <a
-            href="#"
-            className="underline hover:text-slate-600 transition-colors"
-          >
+          <span className="underline hover:text-slate-600 transition-colors">
             View documentation
-          </a>
+          </span>
         </p>
       </div>
     </main>

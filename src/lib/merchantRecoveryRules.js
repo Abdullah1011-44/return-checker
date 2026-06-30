@@ -42,7 +42,8 @@ const FORBIDDEN_CONDITION_KEYS = new Set([
 ]);
 
 const recoveryRuleTypeSchema = z.enum(RECOVERY_RULE_TYPES, {
-  message: "type must be EXCHANGE, STORE_CREDIT, PARTIAL_REFUND, or MANUAL_REVIEW.",
+  message:
+    "type must be EXCHANGE, STORE_CREDIT, PARTIAL_REFUND, or MANUAL_REVIEW.",
 });
 
 const recoveryRuleConditionsSchema = z
@@ -54,7 +55,7 @@ const recoveryRuleConditionsSchema = z
   .refine(
     (value) =>
       !Object.keys(value).some((key) => FORBIDDEN_CONDITION_KEYS.has(key)),
-    { message: "conditions contain disallowed fields." }
+    { message: "conditions contain disallowed fields." },
   )
   .refine(
     (value) =>
@@ -63,7 +64,7 @@ const recoveryRuleConditionsSchema = z
       value.maxOrderValue >= value.minOrderValue,
     {
       message: "maxOrderValue must be greater than or equal to minOrderValue.",
-    }
+    },
   );
 
 const recoveryRuleActionsSchema = z
@@ -88,13 +89,16 @@ export const merchantRecoveryRuleInputSchema = z
       .number({ message: "priority must be an integer." })
       .int({ message: "priority must be an integer." })
       .min(1, { message: "priority must be at least 1." })
-      .max(999, { message: "priority must be at most 999." }),
+      .max(4, { message: "priority must be at most 4." }),
     conditions: recoveryRuleConditionsSchema,
     actions: recoveryRuleActionsSchema,
   })
   .strict()
   .superRefine((rule, ctx) => {
-    if (rule.type === "PARTIAL_REFUND" && rule.actions.requiresApproval === false) {
+    if (
+      rule.type === "PARTIAL_REFUND" &&
+      rule.actions.requiresApproval === false
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "PARTIAL_REFUND rules must require merchant approval.",
@@ -300,7 +304,7 @@ function sortRulesByPriority(rules) {
  */
 export async function ensureDefaultMerchantRecoveryRules(
   merchantId,
-  prismaClient
+  prismaClient,
 ) {
   for (const template of DEFAULT_MERCHANT_RECOVERY_RULES) {
     await prismaClient.merchantRecoveryRule.upsert({
@@ -354,7 +358,7 @@ export async function listMerchantRecoveryRules(merchantId, prismaClient) {
 export async function upsertMerchantRecoveryRules(
   merchantId,
   rulesInput,
-  prismaClient
+  prismaClient,
 ) {
   return prismaClient.$transaction(async (tx) => {
     const existing = await tx.merchantRecoveryRule.findMany({
@@ -364,7 +368,7 @@ export async function upsertMerchantRecoveryRules(
     for (const ruleInput of rulesInput) {
       const actions = normalizePartialRefundActions(
         ruleInput.actions,
-        ruleInput.type
+        ruleInput.type,
       );
 
       await tx.merchantRecoveryRule.upsert({

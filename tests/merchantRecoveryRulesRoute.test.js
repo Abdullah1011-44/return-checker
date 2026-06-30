@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_MERCHANT_RECOVERY_RULES } from "@/lib/merchantRecoveryRules";
 import { createMockMerchant } from "./helpers/mockMerchant.js";
 import { mockPrisma, resetMockPrisma } from "./helpers/mockPrisma.js";
-import { DEFAULT_MERCHANT_RECOVERY_RULES } from "@/lib/merchantRecoveryRules";
 
 const mockRequireMerchantForRoute = vi.fn();
 const mockSafeCreateAdminAuditLog = vi.fn();
@@ -231,7 +231,8 @@ describe("merchant recovery rules API", () => {
       { label: "string", priority: "high" },
       { label: "decimal", priority: 1.5 },
       { label: "below minimum", priority: 0 },
-      { label: "above maximum", priority: 1000 },
+      { label: "negative", priority: -2 },
+      { label: "above maximum", priority: 5 },
     ];
 
     for (const testCase of invalidCases) {

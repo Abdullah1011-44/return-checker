@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { fetchMerchantJson, getApiErrorMessage } from "@/lib/dashboardFetch";
 
 // Human-readable labels for return reason codes
 const reasonLabels = {
@@ -185,17 +186,32 @@ export default function AnalyticsPage() {
   const loadRequests = useCallback(async () => {
     setLoading(true);
     setLoadError("");
+
     try {
-      const res = await fetch("/api/requests");
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setLoadError(data.message || "Failed to load analytics data.");
+      const { res, data, aborted } = await fetchMerchantJson("/api/requests");
+
+      if (aborted) {
+        setLoadError("Could not load analytics.");
         setRequests([]);
         return;
       }
-      setRequests(Array.isArray(data.requests) ? data.requests : []);
-    } catch {
-      setLoadError("Failed to load analytics data.");
+
+      if (!res?.ok || data?.success !== true) {
+        setLoadError(
+          getApiErrorMessage(res, data, "Could not load analytics."),
+        );
+        setRequests([]);
+        return;
+      }
+
+      const nextRequests = Array.isArray(data.requests) ? data.requests : [];
+      setRequests(nextRequests);
+      setLoadError("");
+    } catch (error) {
+      console.error("[analytics] Failed to load analytics data.", {
+        name: error instanceof Error ? error.name : "Error",
+      });
+      setLoadError("Could not load analytics.");
       setRequests([]);
     } finally {
       setLoading(false);
