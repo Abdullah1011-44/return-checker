@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { STORE_TYPES } from "@/lib/merchantSettings";
+import { RECOVERY_RULE_TYPES } from "@/lib/merchantRecoveryRules";
 
 const STORE_TYPE_LABELS = {
   GENERAL: "General retail",
@@ -218,6 +219,413 @@ function ToggleRow({ id, label, description, checked, onChange }) {
         className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
       />
     </label>
+  );
+}
+
+const LADDER_RULE_LABELS = {
+  EXCHANGE: "Exchange",
+  STORE_CREDIT: "Store credit",
+  PARTIAL_REFUND: "Partial refund",
+  MANUAL_REVIEW: "Manual review",
+};
+
+function rulesByType(rules) {
+  return Object.fromEntries(rules.map((rule) => [rule.type, rule]));
+}
+
+function validateRecoveryRulesForm(rules) {
+  const errors = {};
+  const priorities = [];
+
+  for (const type of RECOVERY_RULE_TYPES) {
+    const rule = rules.find((item) => item.type === type);
+    if (!rule) {
+      errors[type] = "Missing rule configuration.";
+      continue;
+    }
+
+    const priority = Number(rule.priority);
+    if (!Number.isInteger(priority) || priority < 1 || priority > 999) {
+      errors[`${type}.priority`] = "Priority must be an integer from 1 to 999.";
+    } else {
+      priorities.push(priority);
+    }
+
+    const message = rule.actions?.message ?? "";
+    if (message.length > 240) {
+      errors[`${type}.message`] = "Message must be 240 characters or fewer.";
+    }
+
+    if (type === "STORE_CREDIT") {
+      const bonus = Number(rule.actions?.bonusPercent ?? 0);
+      if (!Number.isInteger(bonus) || bonus < 0 || bonus > 100) {
+        errors[`${type}.bonusPercent`] =
+          "Bonus percent must be an integer from 0 to 100.";
+      }
+    }
+
+    if (type === "PARTIAL_REFUND") {
+      const maxRefund = Number(rule.actions?.maxRefundPercent ?? 20);
+      if (!Number.isInteger(maxRefund) || maxRefund < 1 || maxRefund > 100) {
+        errors[`${type}.maxRefundPercent`] =
+          "Max refund percent must be an integer from 1 to 100.";
+      }
+    }
+  }
+
+  if (new Set(priorities).size !== priorities.length) {
+    errors.priorityDuplicate = "Each rule must have a unique priority.";
+  }
+
+  return errors;
+}
+
+function rulesToPutPayload(rules) {
+  return {
+    rules: RECOVERY_RULE_TYPES.map((type) => {
+      const rule = rules.find((item) => item.type === type);
+      const actions = {
+        message: rule.actions?.message ?? "",
+      };
+
+      if (type === "STORE_CREDIT") {
+        actions.bonusPercent = Number(rule.actions?.bonusPercent ?? 0);
+      }
+
+      if (type === "PARTIAL_REFUND") {
+        actions.maxRefundPercent = Number(rule.actions?.maxRefundPercent ?? 20);
+        actions.requiresApproval = true;
+      }
+
+      return {
+        type,
+        name: rule.name,
+        enabled: Boolean(rule.enabled),
+        priority: Number(rule.priority),
+        conditions: rule.conditions ?? {},
+        actions,
+      };
+    }),
+  };
+}
+
+function OfferLadderRulesSection() {
+  const [rules, setRules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const loadRecoveryRules = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    setSaveSuccess("");
+
+    try {
+      const res = await fetch("/api/merchant/recovery-rules", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.success !== true || !Array.isArray(data.rules)) {
+        setLoadError(
+          data.message ||
+            data.error ||
+            (res.status === 401
+              ? "Please sign in to manage recovery rules."
+              : "Unable to load recovery rules."),
+        );
+        return;
+      }
+
+      setRules(data.rules);
+      setFieldErrors({});
+    } catch {
+      setLoadError("Unable to load recovery rules.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRecoveryRules();
+  }, [loadRecoveryRules]);
+
+  function updateRule(type, patch) {
+    setRules((current) =>
+      current.map((rule) =>
+        rule.type === type
+          ? {
+              ...rule,
+              ...patch,
+              actions: patch.actions
+                ? { ...rule.actions, ...patch.actions }
+                : rule.actions,
+            }
+          : rule,
+      ),
+    );
+    setFieldErrors((current) => ({
+      ...current,
+      [type]: undefined,
+      [`${type}.priority`]: undefined,
+      [`${type}.message`]: undefined,
+      [`${type}.bonusPercent`]: undefined,
+      [`${type}.maxRefundPercent`]: undefined,
+      priorityDuplicate: undefined,
+    }));
+    setSaveSuccess("");
+    setSaveError("");
+  }
+
+  async function handleSaveRules(event) {
+    event.preventDefault();
+    setSaveError("");
+    setSaveSuccess("");
+
+    const errors = validateRecoveryRulesForm(rules);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setSaveError("Fix the highlighted fields before saving.");
+      return;
+    }
+
+    setFieldErrors({});
+    setSaving(true);
+
+    try {
+      const res = await fetch("/api/merchant/recovery-rules", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(rulesToPutPayload(rules)),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.success !== true || !Array.isArray(data.rules)) {
+        const detailMessage = Array.isArray(data.details)
+          ? data.details
+              .map((item) => item.message)
+              .filter(Boolean)
+              .join(" ")
+          : "";
+
+        setSaveError(
+          detailMessage ||
+            data.message ||
+            data.error ||
+            "Unable to save recovery rules.",
+        );
+        return;
+      }
+
+      setRules(data.rules);
+      setSaveSuccess("Recovery rules saved.");
+    } catch {
+      setSaveError("Unable to save recovery rules.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const rulesMap = rulesByType(rules);
+
+  return (
+    <SectionCard
+      title="Offer Ladder Rules"
+      description="Preferences saved here guide future recovery recommendations. Automated offer ladder execution will be connected in a future release."
+    >
+      <p className="text-xs text-slate-500 leading-relaxed -mt-2">
+        Priority controls the order your app recommends recovery options. Lower
+        numbers appear first. These rules guide recovery recommendations only.
+        They do not automatically approve, reject, or refund returns.
+      </p>
+
+      {loading ? (
+        <p className="text-sm text-slate-500">Loading recovery rules…</p>
+      ) : null}
+
+      {loadError ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      ) : null}
+
+      {!loading && !loadError ? (
+        <form onSubmit={handleSaveRules} className="space-y-4">
+          {RECOVERY_RULE_TYPES.map((type) => {
+            const rule = rulesMap[type];
+            if (!rule) {
+              return null;
+            }
+
+            const cardId = `recovery-rule-${type.toLowerCase()}`;
+
+            return (
+              <div
+                key={type}
+                className="rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-4 space-y-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-800">
+                      {LADDER_RULE_LABELS[type]}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">{rule.name}</p>
+                  </div>
+                  <label
+                    htmlFor={`${cardId}-enabled`}
+                    className="flex items-center gap-2 text-xs font-medium text-slate-600"
+                  >
+                    Enabled
+                    <input
+                      id={`${cardId}-enabled`}
+                      type="checkbox"
+                      checked={Boolean(rule.enabled)}
+                      onChange={(event) =>
+                        updateRule(type, { enabled: event.target.checked })
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <FieldLabel
+                      htmlFor={`${cardId}-priority`}
+                      label="Priority"
+                      hint="Lower numbers are recommended first."
+                    />
+                    <TextInput
+                      id={`${cardId}-priority`}
+                      type="number"
+                      min="1"
+                      max="999"
+                      value={String(rule.priority ?? "")}
+                      onChange={(event) =>
+                        updateRule(type, { priority: event.target.value })
+                      }
+                      error={
+                        fieldErrors[`${type}.priority`] ||
+                        fieldErrors.priorityDuplicate
+                      }
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <FieldLabel
+                      htmlFor={`${cardId}-message`}
+                      label="Message / note"
+                      hint="Shown to merchants when this option is recommended."
+                    />
+                    <TextInput
+                      id={`${cardId}-message`}
+                      value={rule.actions?.message ?? ""}
+                      onChange={(event) =>
+                        updateRule(type, {
+                          actions: { message: event.target.value },
+                        })
+                      }
+                      error={fieldErrors[`${type}.message`]}
+                    />
+                  </div>
+
+                  {type === "STORE_CREDIT" ? (
+                    <div>
+                      <FieldLabel
+                        htmlFor={`${cardId}-bonus`}
+                        label="Bonus percent"
+                        hint="Optional store-credit bonus (0–100)."
+                      />
+                      <TextInput
+                        id={`${cardId}-bonus`}
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={String(rule.actions?.bonusPercent ?? 0)}
+                        onChange={(event) =>
+                          updateRule(type, {
+                            actions: { bonusPercent: event.target.value },
+                          })
+                        }
+                        error={fieldErrors[`${type}.bonusPercent`]}
+                      />
+                    </div>
+                  ) : null}
+
+                  {type === "PARTIAL_REFUND" ? (
+                    <>
+                      <div>
+                        <FieldLabel
+                          htmlFor={`${cardId}-max-refund`}
+                          label="Max refund percent"
+                          hint="Upper bound for partial refund offers (1–100)."
+                        />
+                        <TextInput
+                          id={`${cardId}-max-refund`}
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={String(rule.actions?.maxRefundPercent ?? 20)}
+                          onChange={(event) =>
+                            updateRule(type, {
+                              actions: { maxRefundPercent: event.target.value },
+                            })
+                          }
+                          error={fieldErrors[`${type}.maxRefundPercent`]}
+                        />
+                      </div>
+                      <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                        <p className="text-xs font-semibold text-amber-900">
+                          Approval required (always on)
+                        </p>
+                        <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                          Partial refund does not automatically refund the
+                          customer. Your approval is always required.
+                        </p>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+
+          {saveError ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {saveError}
+            </div>
+          ) : null}
+
+          {saveSuccess ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              {saveSuccess}
+            </div>
+          ) : null}
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={saving}
+              className="text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed rounded-full px-5 py-2 shadow-sm transition-all duration-150"
+            >
+              {saving ? "Saving…" : "Save recovery rules"}
+            </button>
+          </div>
+        </form>
+      ) : null}
+    </SectionCard>
   );
 }
 
@@ -488,6 +896,8 @@ export default function MerchantSettingsPage() {
                 ))}
               </div>
             </SectionCard>
+
+            <OfferLadderRulesSection />
 
             <SectionCard
               title="AI"

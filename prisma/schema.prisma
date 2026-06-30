@@ -41,6 +41,7 @@ model Merchant {
   adminAuditLogs       AdminAuditLog[]
   shopifyProducts      ShopifyProduct[]
   settings             MerchantSettings?
+  recoveryRules        MerchantRecoveryRule[]
 
   @@index([shopDomain])
   @@index([planTier])
@@ -88,6 +89,26 @@ model MerchantSettings {
   merchant             Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
   @@index([merchantId])
+}
+
+model MerchantRecoveryRule {
+  id         String           @id @default(cuid())
+  merchantId String
+  type       RecoveryRuleType
+  name       String
+  enabled    Boolean          @default(true)
+  priority   Int
+  conditions Json
+  actions    Json
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  merchant   Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, type])
+  @@index([merchantId])
+  @@index([merchantId, enabled])
+  @@index([merchantId, priority])
+  @@index([merchantId, type])
 }
 
 model CustomerOrder {
@@ -382,4 +403,11 @@ enum StoreType {
   HOME
   FOOD
   OTHER
+}
+
+enum RecoveryRuleType {
+  EXCHANGE
+  STORE_CREDIT
+  PARTIAL_REFUND
+  MANUAL_REVIEW
 }
