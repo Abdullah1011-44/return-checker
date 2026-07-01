@@ -130,6 +130,9 @@ export function serializeItemRecoveryDecision({
     aiOfferSuppressed:
       productExcluded || pipelineResult.aiPersuasionEnabled === false,
     policyDecision: buildPolicyDecisionFromPipeline(pipelineResult),
+    ...(pipelineResult.dynamicOfferLadder
+      ? { dynamicOfferLadder: pipelineResult.dynamicOfferLadder }
+      : {}),
   };
 
   if (productExcluded) {
@@ -197,6 +200,9 @@ export function mergeCheckItemWithDecision(checkItem, decision) {
     ...(decision.policyDecision
       ? { policyDecision: decision.policyDecision }
       : {}),
+    ...(decision.dynamicOfferLadder
+      ? { dynamicOfferLadder: decision.dynamicOfferLadder }
+      : {}),
   };
 }
 
@@ -227,6 +233,9 @@ export function buildSingleItemTopLevelFields(decision) {
     ...(decision.policyDecision
       ? { policyDecision: decision.policyDecision }
       : {}),
+    ...(decision.dynamicOfferLadder
+      ? { dynamicOfferLadder: decision.dynamicOfferLadder }
+      : {}),
   };
 }
 
@@ -242,6 +251,31 @@ function buildOrderItemContext(orderItem) {
   };
 }
 
+function buildLadderContextFromOrderItem(orderItem, ladderContext) {
+  const context = { ...(ladderContext ?? {}) };
+
+  if (
+    orderItem?.exchangeStockAvailable != null &&
+    context.exchangeStockAvailable == null
+  ) {
+    context.exchangeStockAvailable = orderItem.exchangeStockAvailable;
+  }
+  if (
+    orderItem?.matchedExchangeVariantId != null &&
+    context.matchedExchangeVariantId == null
+  ) {
+    context.matchedExchangeVariantId = orderItem.matchedExchangeVariantId;
+  }
+  if (
+    orderItem?.matchedExchangeVariantTitle != null &&
+    context.matchedExchangeVariantTitle == null
+  ) {
+    context.matchedExchangeVariantTitle = orderItem.matchedExchangeVariantTitle;
+  }
+
+  return Object.keys(context).length > 0 ? context : null;
+}
+
 /**
  * @param {{
  *   orderItem: Record<string, unknown>;
@@ -252,7 +286,11 @@ function buildOrderItemContext(orderItem) {
  *   productExclusionRule?: Record<string, unknown> | null;
  *   aiConfidenceThreshold?: number | null;
  *   order?: Record<string, unknown> | null;
+ *   merchantRules?: Record<string, unknown> | null;
+ *   policyDecision?: Record<string, unknown> | null;
+ *   ladderContext?: Record<string, unknown> | null;
  *   generateOfferLadderFn?: Parameters<typeof evaluateItemRecoveryPipeline>[0]["generateOfferLadderFn"];
+ *   buildDynamicOfferLadderFn?: Parameters<typeof evaluateItemRecoveryPipeline>[0]["buildDynamicOfferLadderFn"];
  * }} input
  */
 export function evaluateOrderItemRecoveryDecision({
@@ -264,7 +302,11 @@ export function evaluateOrderItemRecoveryDecision({
   productExclusionRule = null,
   aiConfidenceThreshold = null,
   order = null,
+  merchantRules = null,
+  policyDecision = null,
+  ladderContext = null,
   generateOfferLadderFn,
+  buildDynamicOfferLadderFn,
 }) {
   const reasonKey = returnReason
     ? reasonKeyFromUiOrPrisma(returnReason)
@@ -274,18 +316,24 @@ export function evaluateOrderItemRecoveryDecision({
   const pipelineResult = evaluateItemRecoveryPipeline({
     itemContext: buildOrderItemContext(orderItem),
     returnReason: mappedReason ?? returnReason,
+    customerReason: returnReason,
     comment,
     recoveryScore: returnReason ? scoreForReason(reasonKey) : null,
     merchantSettings,
+    merchantRules,
     recoveryRules,
     productExclusionRule,
     aiConfidenceThreshold,
+    order,
+    policyDecision,
+    ladderContext: buildLadderContextFromOrderItem(orderItem, ladderContext),
     policyContext: {
       primaryReason: mappedReason ?? "",
       riskLevel: returnReason ? riskPrismaForReason(reasonKey) : "MEDIUM",
       orderTotal: order?.totalAmount != null ? Number(order.totalAmount) : null,
     },
     generateOfferLadderFn,
+    buildDynamicOfferLadderFn,
   });
 
   return serializeItemRecoveryDecision({

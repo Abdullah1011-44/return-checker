@@ -330,10 +330,14 @@ export default function Home() {
                 <StepBadge step="1" label="Verify your order" />
 
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-semibold text-slate-700">
+                  <label
+                    htmlFor="orderNumber"
+                    className="block text-sm font-semibold text-slate-700"
+                  >
                     Order Number
                   </label>
                   <input
+                    id="orderNumber"
                     type="text"
                     placeholder="e.g. 1001, 1002, 1003"
                     value={orderNumber}
@@ -345,10 +349,14 @@ export default function Home() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-semibold text-slate-700">
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-semibold text-slate-700"
+                  >
                     Email Address
                   </label>
                   <input
+                    id="email"
                     type="email"
                     placeholder="you@example.com"
                     value={email}
@@ -526,6 +534,9 @@ export default function Home() {
                 {getSelectedOrderItems().map((item) => {
                   const details =
                     itemDetails[item.id] || createEmptyItemDetail();
+                  const reasonId = `return-reason-${item.id}`;
+                  const commentId = `return-comment-${item.id}`;
+                  const proofId = `proof-image-${item.id}`;
 
                   return (
                     <div
@@ -543,10 +554,14 @@ export default function Home() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="block text-sm font-semibold text-slate-700">
+                        <label
+                          htmlFor={reasonId}
+                          className="block text-sm font-semibold text-slate-700"
+                        >
                           Return Reason
                         </label>
                         <select
+                          id={reasonId}
                           value={details.returnReason}
                           onChange={(e) =>
                             updateItemDetail(
@@ -572,10 +587,14 @@ export default function Home() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="block text-sm font-semibold text-slate-700">
+                        <label
+                          htmlFor={commentId}
+                          className="block text-sm font-semibold text-slate-700"
+                        >
                           Tell us more about this item
                         </label>
                         <textarea
+                          id={commentId}
                           value={details.comment}
                           onChange={(e) =>
                             updateItemDetail(item.id, "comment", e.target.value)
@@ -587,13 +606,16 @@ export default function Home() {
                       </div>
 
                       <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-slate-700">
-                          Upload Proof Image{" "}
-                          <span className="text-slate-400 font-normal">
-                            (optional)
+                        <label
+                          htmlFor={proofId}
+                          className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer bg-white hover:bg-slate-100 hover:border-slate-300 transition-all duration-150"
+                        >
+                          <span className="block text-sm font-semibold text-slate-700 mb-2 self-start px-1">
+                            Upload Proof Image{" "}
+                            <span className="text-slate-400 font-normal">
+                              (optional)
+                            </span>
                           </span>
-                        </label>
-                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer bg-white hover:bg-slate-100 hover:border-slate-300 transition-all duration-150">
                           <div className="flex flex-col items-center justify-center gap-1 text-slate-400">
                             <span className="text-xl">📷</span>
                             <span className="text-xs font-medium">
@@ -602,6 +624,7 @@ export default function Home() {
                             </span>
                           </div>
                           <input
+                            id={proofId}
                             type="file"
                             accept="image/*"
                             className="hidden"
@@ -610,6 +633,7 @@ export default function Home() {
                         </label>
                         {details.imagePreview && (
                           <div className="relative mt-1">
+                            {/* biome-ignore lint/performance/noImgElement: User-uploaded proof image preview; Next Image remote config is not available yet. */}
                             <img
                               src={details.imagePreview}
                               alt="Proof preview"
@@ -780,6 +804,7 @@ export default function Home() {
                     Track Return Status →
                   </a>
                   <button
+                    type="button"
                     onClick={handleReset}
                     className="w-full py-3 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98] text-slate-600 hover:text-slate-800 text-sm font-semibold transition-all duration-150 flex items-center justify-center gap-2 group"
                   >
@@ -804,12 +829,12 @@ export default function Home() {
           </a>
           {" · "}
           Need help?{" "}
-          <a
-            href="#"
+          <button
+            type="button"
             className="underline hover:text-slate-600 transition-colors"
           >
             Contact support
-          </a>
+          </button>
         </p>
       </div>
     </main>

@@ -46,7 +46,7 @@ describe("syncShopifyData inngest function", () => {
   });
 
   it("runs sync runner with merchantId from event", async () => {
-    const handler = syncShopifyData["fn"];
+    const handler = syncShopifyData.fn;
     const summary = await handler({
       event: {
         data: {

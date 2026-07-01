@@ -6,7 +6,7 @@ import { useEffect } from "react";
  * Global App Router error boundary.
  * Shows a safe fallback UI — never renders stack traces or raw error details.
  */
-export default function Error({ error, reset }) {
+export default function GlobalError({ error, reset }) {
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
       console.error(error);

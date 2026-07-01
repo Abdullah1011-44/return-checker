@@ -52,7 +52,7 @@ function resolveCustomerEmail(order) {
   return `shopify-order-${order.id}@placeholder.returnradar.local`;
 }
 
-function resolveCustomerName(order) {
+function resolveCustomerName(_order) {
   return "Shopify Customer";
 }
 

@@ -55,11 +55,14 @@ export async function POST(request) {
     if (order) {
       const orderCheck = await buildOrderCheckApiResponse(order);
       // Per-item product exclusion (pre-flight) + offer ladder for non-excluded items.
+      // Recovery rules load inside evaluateCheckReturnItemDecisions when not on order.
       const { itemDecisions, hasExcludedItems, serializePolicyResult } =
         await evaluateCheckReturnItemDecisions({
           order,
           merchantId: order.merchantId,
           merchant: order.merchant,
+          settings: order.merchantSettings,
+          recoveryRules: order.recoveryRules,
         });
 
       const items = orderCheck.items.map((checkItem) =>

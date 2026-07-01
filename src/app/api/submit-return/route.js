@@ -159,10 +159,13 @@ export async function POST(request) {
     }
 
     // Per-item product exclusion (pre-flight) + independent decisions per return item.
+    // Recovery rules load inside evaluateSubmitReturnItemDecisions when not on order.
     const { itemDecisions, hasExcludedItems, serializePolicyResult } =
       await evaluateSubmitReturnItemDecisions({
         merchantId,
         merchant: order.merchant,
+        settings: order.merchantSettings,
+        recoveryRules: order.recoveryRules,
         order,
         matchedOrderItems,
         returnRequestItems,

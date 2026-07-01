@@ -108,10 +108,14 @@ function ReturnStatusContent() {
                 </p>
 
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-semibold text-slate-700">
+                  <label
+                    htmlFor="status-order-number"
+                    className="block text-sm font-semibold text-slate-700"
+                  >
                     Order Number
                   </label>
                   <input
+                    id="status-order-number"
                     type="text"
                     placeholder="e.g. 1001"
                     value={orderNumber}
@@ -123,10 +127,14 @@ function ReturnStatusContent() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-semibold text-slate-700">
+                  <label
+                    htmlFor="status-email"
+                    className="block text-sm font-semibold text-slate-700"
+                  >
                     Email Address
                   </label>
                   <input
+                    id="status-email"
                     type="email"
                     placeholder="you@example.com"
                     value={email}
@@ -272,12 +280,12 @@ function ReturnStatusContent() {
           </Link>
           {" · "}
           Need help?{" "}
-          <a
-            href="#"
+          <button
+            type="button"
             className="underline hover:text-slate-600 transition-colors"
           >
             Contact support
-          </a>
+          </button>
         </p>
       </div>
     </main>

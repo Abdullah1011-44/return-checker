@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const ORDER_NUMBER_PATTERN = /^[a-zA-Z0-9#_-]+$/;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally rejects ASCII control characters from user input.
 const CONTROL_CHAR_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 
 const RETURN_REASON_VALUES = [

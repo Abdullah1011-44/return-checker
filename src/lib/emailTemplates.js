@@ -84,7 +84,6 @@ function formatItemsHtml(items) {
  * Build subject/html/text for merchant return status notifications.
  */
 export function buildReturnStatusEmail({
-  customerEmail,
   orderNumber,
   merchantName,
   status,

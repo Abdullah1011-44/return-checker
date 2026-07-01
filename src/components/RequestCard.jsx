@@ -88,7 +88,7 @@ export default function RequestCard({
 
   useEffect(() => {
     setNote(request.merchantNote || "");
-  }, [request.id, request.merchantNote]);
+  }, [request.merchantNote]);
 
   async function runAction(callback) {
     if (isUpdating) return;
@@ -243,6 +243,7 @@ export default function RequestCard({
                       target="_blank"
                       rel="noopener noreferrer"
                     >
+                      {/* biome-ignore lint/performance/noImgElement: User-uploaded proof image preview; Next Image remote config is not available yet. */}
                       <img
                         src={item.proofImage}
                         alt={`Proof for ${item.title}`}
@@ -277,6 +278,7 @@ export default function RequestCard({
               target="_blank"
               rel="noopener noreferrer"
             >
+              {/* biome-ignore lint/performance/noImgElement: User-uploaded proof image preview; Next Image remote config is not available yet. */}
               <img
                 src={request.proofImage}
                 alt="Customer proof"
@@ -338,10 +340,14 @@ export default function RequestCard({
         <div className="border-t border-slate-100 mb-4" />
 
         <div className="mb-4">
-          <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">
+          <label
+            htmlFor={`merchant-note-${request.id}`}
+            className="block text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2"
+          >
             Merchant Note
           </label>
           <textarea
+            id={`merchant-note-${request.id}`}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Add an internal note about this request…"
@@ -349,6 +355,7 @@ export default function RequestCard({
             className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 placeholder-slate-400 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent transition-all duration-150 resize-none"
           />
           <button
+            type="button"
             onClick={handleSaveNote}
             disabled={isUpdating}
             className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-all duration-150 disabled:opacity-40"
@@ -377,6 +384,7 @@ export default function RequestCard({
 
         <div className="flex gap-2.5 flex-wrap">
           <button
+            type="button"
             onClick={handleApprove}
             disabled={
               isUpdating ||
@@ -389,6 +397,7 @@ export default function RequestCard({
           </button>
 
           <button
+            type="button"
             onClick={handleReject}
             disabled={
               isUpdating ||
@@ -401,6 +410,7 @@ export default function RequestCard({
           </button>
 
           <button
+            type="button"
             onClick={handleManualReview}
             disabled={
               isUpdating ||
@@ -413,6 +423,7 @@ export default function RequestCard({
           </button>
 
           <button
+            type="button"
             onClick={handleResolve}
             disabled={isUpdating || request.status === "Resolved"}
             className="inline-flex items-center gap-2 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-emerald-700 text-sm font-semibold px-4 py-2.5 rounded-xl transition-all duration-150"

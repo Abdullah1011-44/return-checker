@@ -14,6 +14,7 @@
  * no AI persuasion. See productExclusion.js for ACL-safe routing rules.
  */
 import { buildAIGuardrailContext } from "@/lib/aiGuardrails";
+import { buildDynamicOfferLadder } from "@/lib/dynamicOfferLadder";
 import {
   evaluateProductExclusion,
   findProductExclusionRule,
@@ -25,6 +26,133 @@ import {
   POLICY_DECISIONS,
   POLICY_REASONS,
 } from "@/lib/returnPolicyEngine";
+
+function buildFlatMerchantRulesFromSettings(merchantSettings) {
+  if (!merchantSettings || typeof merchantSettings !== "object") {
+    return {};
+  }
+
+  const flat = {};
+  const exchange =
+    merchantSettings.allowExchanges ?? merchantSettings.allowExchange;
+  const storeCredit = merchantSettings.allowStoreCredit;
+  const partialRefund =
+    merchantSettings.allowPartialRefunds ?? merchantSettings.allowPartialRefund;
+  const manualReview = merchantSettings.allowManualReviewFallback;
+
+  if (exchange != null) {
+    flat.exchangeEnabled = exchange !== false;
+  }
+  if (storeCredit != null) {
+    flat.storeCreditEnabled = storeCredit !== false;
+  }
+  if (partialRefund != null) {
+    flat.partialRefundEnabled = partialRefund !== false;
+  }
+  if (manualReview != null) {
+    flat.manualReviewEnabled = manualReview !== false;
+  }
+
+  return flat;
+}
+
+function mergeExplicitMerchantRules(settingsRules, explicitRules) {
+  const merged = { ...settingsRules };
+
+  if (!explicitRules || typeof explicitRules !== "object") {
+    return merged;
+  }
+
+  for (const [key, value] of Object.entries(explicitRules)) {
+    if (value != null) {
+      merged[key] = value;
+    }
+  }
+
+  return merged;
+}
+
+function buildPolicyDecisionForLadder({
+  pipelineReason,
+  pipelineDecision,
+  externalPolicyDecision,
+}) {
+  if (externalPolicyDecision && typeof externalPolicyDecision === "object") {
+    return externalPolicyDecision;
+  }
+
+  const policyDecision = {};
+
+  if (pipelineDecision != null) {
+    policyDecision.decision = pipelineDecision;
+  }
+  if (pipelineReason != null) {
+    policyDecision.reason = pipelineReason;
+  }
+
+  if (pipelineReason === POLICY_REASONS.LEGAL_REVIEW_REQUIRED) {
+    policyDecision.status = "LEGAL_REVIEW_REQUIRED";
+  }
+
+  return policyDecision;
+}
+
+function buildExclusionDecisionForLadder(exclusionResult) {
+  if (!exclusionResult?.productExcluded) {
+    return { productExcluded: false };
+  }
+
+  return {
+    productExcluded: true,
+    excluded: true,
+    status: "EXCLUDED",
+    reason: exclusionResult.exclusionReason ?? "PRODUCT_EXCLUDED",
+    exclusionRuleId: exclusionResult.exclusionRuleId ?? null,
+    matchedField: exclusionResult.matchedField ?? null,
+    matchedValue: exclusionResult.matchedValue ?? null,
+  };
+}
+
+function buildRecoveryDecisionForLadder({ manualReviewRequired = false }) {
+  if (!manualReviewRequired) {
+    return {};
+  }
+
+  return { manualReviewRequired: true };
+}
+
+function attachDynamicOfferLadder(
+  result,
+  {
+    item,
+    order,
+    customerReason,
+    policyDecision,
+    exclusionDecision,
+    recoveryDecision,
+    merchantRules,
+    recoveryRules,
+    context,
+    buildDynamicOfferLadderFn = buildDynamicOfferLadder,
+  },
+) {
+  const dynamicOfferLadder = buildDynamicOfferLadderFn({
+    item,
+    order,
+    customerReason,
+    policyDecision,
+    exclusionDecision,
+    recoveryDecision,
+    merchantRules,
+    recoveryRules,
+    context,
+  });
+
+  return {
+    ...result,
+    dynamicOfferLadder,
+  };
+}
 
 function passesAiConfidenceThreshold(recoveryScore, aiConfidenceThreshold) {
   if (aiConfidenceThreshold == null) {
@@ -105,7 +233,17 @@ function buildExcludedItemPipelineResult(
  *     riskLevel?: string;
  *     orderTotal?: number | null;
  *   };
+ *   customerReason?: string | null;
+ *   order?: Record<string, unknown> | null;
+ *   merchantRules?: Record<string, unknown> | null;
+ *   policyDecision?: Record<string, unknown> | null;
+ *   ladderContext?: {
+ *     exchangeStockAvailable?: boolean;
+ *     matchedExchangeVariantId?: string | null;
+ *     matchedExchangeVariantTitle?: string | null;
+ *   } | null;
  *   generateOfferLadderFn?: typeof generateOfferLadder;
+ *   buildDynamicOfferLadderFn?: typeof buildDynamicOfferLadder;
  * }} input
  */
 export function evaluateItemRecoveryPipeline({
@@ -114,23 +252,63 @@ export function evaluateItemRecoveryPipeline({
   comment = null,
   recoveryScore = null,
   merchantSettings,
+  merchantRules = null,
   recoveryRules = [],
   productExclusionRule = null,
   aiConfidenceThreshold = null,
   policyContext = {},
+  customerReason = null,
+  order = null,
+  policyDecision: externalPolicyDecision = null,
+  ladderContext = null,
   generateOfferLadderFn = generateOfferLadder,
+  buildDynamicOfferLadderFn = buildDynamicOfferLadder,
 }) {
   const exclusionRule =
     productExclusionRule ?? findProductExclusionRule(recoveryRules);
   const exclusionResult = evaluateProductExclusion(exclusionRule, itemContext);
+  const resolvedCustomerReason =
+    customerReason ?? policyContext.primaryReason ?? returnReason ?? "";
+  const explicitMerchantRules = mergeExplicitMerchantRules(
+    buildFlatMerchantRulesFromSettings(merchantSettings),
+    merchantRules,
+  );
+
+  function finalizePipelineResult(
+    result,
+    { manualReviewRequired = false, policyDecision = null } = {},
+  ) {
+    const exclusionDecision = buildExclusionDecisionForLadder(exclusionResult);
+    const resolvedPolicyDecision =
+      policyDecision ??
+      buildPolicyDecisionForLadder({
+        pipelineReason: result.reason,
+        pipelineDecision: result.decision,
+        externalPolicyDecision,
+      });
+    const recoveryDecision = buildRecoveryDecisionForLadder({
+      manualReviewRequired,
+    });
+
+    return attachDynamicOfferLadder(result, {
+      item: itemContext,
+      order,
+      customerReason: resolvedCustomerReason,
+      policyDecision: resolvedPolicyDecision,
+      exclusionDecision,
+      recoveryDecision,
+      merchantRules: explicitMerchantRules,
+      recoveryRules,
+      context: ladderContext ?? {},
+      buildDynamicOfferLadderFn,
+    });
+  }
 
   // Pre-flight product exclusion: skip merchant settings, recovery rules,
   // aiConfidenceThreshold, and generateOfferLadder() for this item.
   if (exclusionResult.productExcluded) {
-    return buildExcludedItemPipelineResult(
-      exclusionResult,
-      returnReason,
-      comment,
+    return finalizePipelineResult(
+      buildExcludedItemPipelineResult(exclusionResult, returnReason, comment),
     );
   }
 
@@ -155,24 +333,27 @@ export function evaluateItemRecoveryPipeline({
   });
 
   if (!passesAiConfidenceThreshold(recoveryScore, aiConfidenceThreshold)) {
-    return {
-      productExcluded: false,
-      decision: POLICY_DECISIONS.MANUAL_REVIEW,
-      reason: POLICY_REASONS.NO_SAFE_OPTION,
-      legalFlags: [],
-      recoveryOffers: [],
-      offerLadder,
-      generateOfferLadderInvoked: true,
-      aiConfidenceBypassed: false,
-      aiPersuasionEnabled: false,
-      aiOfferSuppressed: true,
-      guardrailContext,
-    };
+    return finalizePipelineResult(
+      {
+        productExcluded: false,
+        decision: POLICY_DECISIONS.MANUAL_REVIEW,
+        reason: POLICY_REASONS.NO_SAFE_OPTION,
+        legalFlags: [],
+        recoveryOffers: [],
+        offerLadder,
+        generateOfferLadderInvoked: true,
+        aiConfidenceBypassed: false,
+        aiPersuasionEnabled: false,
+        aiOfferSuppressed: true,
+        guardrailContext,
+      },
+      { manualReviewRequired: true },
+    );
   }
 
   const primaryOffer = offerLadder.primaryOffer;
 
-  return {
+  return finalizePipelineResult({
     productExcluded: false,
     decision: primaryOffer?.decision ?? POLICY_DECISIONS.MANUAL_REVIEW,
     reason: primaryOffer
@@ -186,5 +367,5 @@ export function evaluateItemRecoveryPipeline({
     aiPersuasionEnabled: offerLadder.offers.length > 0,
     aiOfferSuppressed: offerLadder.offers.length === 0,
     guardrailContext,
-  };
+  });
 }
