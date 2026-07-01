@@ -8,6 +8,13 @@ import {
 } from "@/lib/duplicateReturnPrevention";
 import { createApiErrorResponse, handleApiError } from "@/lib/errors";
 import {
+  buildExcludedItemAiSummary,
+  buildItemExclusionMerchantNote,
+  buildSingleItemTopLevelFields,
+  evaluateSubmitReturnItemDecisions,
+  itemDecisionToBestActionLabel,
+} from "@/lib/itemRecoveryDecisions";
+import {
   findCustomerOrderForReturn,
   resolveMerchantForCustomerFlow,
 } from "@/lib/orderLookup";
@@ -19,12 +26,7 @@ import {
   mapRecoveryOption,
   mapReturnReason,
 } from "@/lib/returnApiMappers";
-import {
-  buildPolicySummary,
-  evaluateReturnPolicyForSubmission,
-  policyDecisionToBestAction,
-  serializePolicyResultForApi,
-} from "@/lib/returnPolicyIntegration";
+import { buildPolicySummary } from "@/lib/returnPolicyIntegration";
 import {
   reasonKeyFromUiOrPrisma,
   resolveRequestEligibility,
@@ -156,24 +158,27 @@ export async function POST(request) {
       );
     }
 
-    const policyResult = await evaluateReturnPolicyForSubmission({
-      merchantId,
-      merchant: order.merchant,
-      order,
-      matchedOrderItems,
-      returnRequestItems,
-      windowExpiresAt,
-    });
+    // Per-item product exclusion (pre-flight) + independent decisions per return item.
+    const { itemDecisions, hasExcludedItems, serializePolicyResult } =
+      await evaluateSubmitReturnItemDecisions({
+        merchantId,
+        merchant: order.merchant,
+        order,
+        matchedOrderItems,
+        returnRequestItems,
+        windowExpiresAt,
+      });
 
-    const recommendedBestAction = policyDecisionToBestAction(
-      policyResult.decision,
-    );
+    const apiPolicyResult = serializePolicyResult();
     const now = new Date();
 
     for (let index = 0; index < returnRequestItems.length; index += 1) {
       const item = returnRequestItems[index];
       const orderItem = matchedOrderItems[index];
+      const itemDecision = itemDecisions[index];
       const reasonKey = reasonKeyFromUiOrPrisma(item.returnReason);
+      const exclusionMerchantNote =
+        buildItemExclusionMerchantNote(itemDecision);
 
       returnItemsCreate.push({
         orderItemId: orderItem.id,
@@ -187,13 +192,19 @@ export async function POST(request) {
         imageMimeType: guessImageMimeType(item.proofImage ?? item.imageUrl),
         recoveryScore: scoreForReason(reasonKey),
         riskLevel: riskPrismaForReason(reasonKey),
-        bestAction: recommendedBestAction,
-        aiSummary: buildPolicySummary({
-          decision: policyResult.decision,
-          customerMessage: policyResult.customerMessage,
-          reasonKey,
-          selectedOptionLabel: item.selectedOption,
-        }),
+        bestAction: itemDecisionToBestActionLabel(itemDecision),
+        aiSummary: itemDecision.productExcluded
+          ? buildExcludedItemAiSummary(itemDecision, {
+              reasonKey,
+              selectedOptionLabel: item.selectedOption,
+            })
+          : buildPolicySummary({
+              decision: itemDecision.policyDecision?.decision,
+              customerMessage: apiPolicyResult.customerMessage,
+              reasonKey,
+              selectedOptionLabel: item.selectedOption,
+            }),
+        merchantNote: exclusionMerchantNote,
         aiClassifiedAt: now,
         merchantDecision: "PENDING",
       });
@@ -265,27 +276,50 @@ export async function POST(request) {
         actorType: "ai",
         note: "AI recovery scores computed for return items",
         metadata: {
-          items: returnRequest.items.map((ri) => ({
+          items: returnRequest.items.map((ri, index) => ({
             returnItemId: ri.id,
             recoveryScore: ri.recoveryScore,
             riskLevel: ri.riskLevel,
             bestAction: ri.bestAction,
+            ...(itemDecisions[index]
+              ? {
+                  productExcluded: itemDecisions[index].productExcluded,
+                  recommendedAction: itemDecisions[index].recommendedAction,
+                  aiOfferSuppressed: itemDecisions[index].aiOfferSuppressed,
+                  exclusionReason: itemDecisions[index].exclusionReason ?? null,
+                  exclusionRuleId: itemDecisions[index].exclusionRuleId ?? null,
+                  matchedField: itemDecisions[index].matchedField ?? null,
+                  matchedValue: itemDecisions[index].matchedValue ?? null,
+                }
+              : {}),
           })),
-          policyDecision: policyResult.decision,
-          policyConfidence: policyResult.confidence,
-          policyCustomerMessage: policyResult.customerMessage,
+          policyDecision: apiPolicyResult.decision,
+          policyConfidence: apiPolicyResult.confidence,
+          policyCustomerMessage: apiPolicyResult.customerMessage,
+          hasExcludedItems,
         },
       },
     });
 
-    return NextResponse.json({
+    const responseBody = {
       success: true,
       message: "Return request submitted successfully.",
-      customerMessage: policyResult.customerMessage,
+      customerMessage: apiPolicyResult.customerMessage,
       returnRequest: serializeReturnRequest(returnRequest),
+      hasExcludedItems,
+      itemDecisions,
       // TODO: Persist policyResult after schema support is added.
-      policyResult: serializePolicyResultForApi(policyResult),
-    });
+      policyResult: apiPolicyResult,
+    };
+
+    if (itemDecisions.length === 1) {
+      Object.assign(
+        responseBody,
+        buildSingleItemTopLevelFields(itemDecisions[0]),
+      );
+    }
+
+    return NextResponse.json(responseBody);
   } catch (error) {
     if (error instanceof DuplicateReturnRequestError) {
       return NextResponse.json(

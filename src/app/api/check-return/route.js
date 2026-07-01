@@ -1,4 +1,8 @@
 import { handleApiError } from "@/lib/errors";
+import {
+  evaluateCheckReturnItemDecisions,
+  mergeCheckItemWithDecision,
+} from "@/lib/itemRecoveryDecisions";
 import { buildOrderCheckResponse, findMockOrder } from "@/lib/mockOrders";
 import {
   buildOrderCheckApiResponse,
@@ -7,10 +11,6 @@ import {
   resolveMerchantForCustomerFlow,
 } from "@/lib/orderLookup";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
-import {
-  evaluateReturnPolicyForCheck,
-  serializePolicyResultForApi,
-} from "@/lib/returnPolicyIntegration";
 import { captureException } from "@/lib/sentry";
 import {
   checkReturnSchema,
@@ -54,16 +54,28 @@ export async function POST(request) {
 
     if (order) {
       const orderCheck = await buildOrderCheckApiResponse(order);
-      const policyResult = await evaluateReturnPolicyForCheck({
-        merchantId: order.merchantId,
-        merchant: order.merchant,
-        order,
-      });
+      // Per-item product exclusion (pre-flight) + offer ladder for non-excluded items.
+      const { itemDecisions, hasExcludedItems, serializePolicyResult } =
+        await evaluateCheckReturnItemDecisions({
+          order,
+          merchantId: order.merchantId,
+          merchant: order.merchant,
+        });
+
+      const items = orderCheck.items.map((checkItem) =>
+        mergeCheckItemWithDecision(
+          checkItem,
+          itemDecisions.find((decision) => decision.itemId === checkItem.id),
+        ),
+      );
 
       // TODO: Persist policyResult after schema support is added.
       return Response.json({
         ...orderCheck,
-        policyResult: serializePolicyResultForApi(policyResult),
+        items,
+        hasExcludedItems,
+        itemDecisions,
+        policyResult: serializePolicyResult(),
       });
     }
 

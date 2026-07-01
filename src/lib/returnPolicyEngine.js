@@ -1,8 +1,21 @@
 /**
- * Deterministic return policy engine (Task 31).
+ * Deterministic return policy engine (Task 31 + Task 32).
  * Pure evaluation only — no Prisma, fetch, env, logging, or side effects.
  * AI must not make the final decision.
+ *
+ * Recovery pipeline order (per item; see recoveryItemPipeline.js):
+ *   Product Exclusion Check → Merchant Settings Gate → Recovery Rules
+ *   → AI Guardrails / aiConfidenceThreshold → generateOfferLadder() → Final Decision
+ *
+ * Product exclusions are evaluated in productExclusion.js as a pre-flight
+ * suppressor before generateOfferLadder(). They are not recovery offers.
  */
+
+import {
+  evaluateProductExclusion,
+  findProductExclusionRule,
+  getOfferLadderRules,
+} from "@/lib/productExclusion";
 
 export const POLICY_DECISIONS = {
   EXCHANGE: "EXCHANGE",
@@ -27,6 +40,7 @@ export const POLICY_REASONS = {
   DEFAULT_RECOVERY_PATH: "DEFAULT_RECOVERY_PATH",
   NO_MATCHING_RULE: "NO_MATCHING_RULE",
   NO_SAFE_OPTION: "NO_SAFE_OPTION",
+  PRODUCT_EXCLUDED: "PRODUCT_EXCLUDED",
 };
 
 export const POLICY_GUARDRAILS = {
@@ -599,7 +613,9 @@ function ruleMatchesRequest(rule, context) {
 }
 
 function findMatchingRule(recoveryRules, context) {
-  const rules = Array.isArray(recoveryRules) ? recoveryRules : [];
+  const rules = getOfferLadderRules(
+    Array.isArray(recoveryRules) ? recoveryRules : [],
+  );
   const enabledRules = rules
     .filter(isRuleEnabled)
     .sort((left, right) => getRulePriority(left) - getRulePriority(right));
@@ -634,6 +650,132 @@ function chooseDefaultRecoveryPath(settings, allowedOptions) {
   return POLICY_DECISIONS.REJECT;
 }
 
+function getPrimaryItemForExclusion(returnRequest, itemList) {
+  const primaryReason = getPrimaryReason(returnRequest, itemList);
+
+  for (const item of itemList) {
+    const reason = item?.reason ?? item?.returnReason;
+    if (primaryReason && normalizeUiReason(reason) === primaryReason) {
+      return item;
+    }
+  }
+
+  return itemList[0] ?? null;
+}
+
+function suppressAutomatedRecoveryOptions(allowedOptions, blockedOptions) {
+  const automatedOptions = [
+    POLICY_DECISIONS.EXCHANGE,
+    POLICY_DECISIONS.STORE_CREDIT,
+    POLICY_DECISIONS.PARTIAL_REFUND,
+  ];
+
+  return {
+    allowedOptions: allowedOptions.filter(
+      (option) => !automatedOptions.includes(option),
+    ),
+    blockedOptions: [...new Set([...blockedOptions, ...automatedOptions])],
+  };
+}
+
+function buildExcludedProductResult({
+  exclusionResult,
+  reason,
+  secondaryReasons,
+  legalFlags,
+  allowedOptions,
+  blockedOptions,
+  guardrails,
+  confidence = "LOW",
+}) {
+  // Product exclusion pre-flight: suppress automated recovery offers and
+  // skip generateOfferLadder(). ACL / consumer-law routing is preserved.
+  const suppressed = suppressAutomatedRecoveryOptions(
+    allowedOptions,
+    blockedOptions,
+  );
+
+  return buildResult({
+    decision: POLICY_DECISIONS.MANUAL_REVIEW,
+    reason,
+    secondaryReasons: [...secondaryReasons, POLICY_REASONS.PRODUCT_EXCLUDED],
+    legalFlags,
+    allowedOptions: suppressed.allowedOptions,
+    blockedOptions: suppressed.blockedOptions,
+    guardrails: [
+      ...guardrails,
+      POLICY_GUARDRAILS.HUMAN_REVIEW_REQUIRED,
+      ...(legalFlags.includes(POLICY_REASONS.ACL_REFUND_RIGHTS_MAY_APPLY)
+        ? [
+            POLICY_GUARDRAILS.MERCHANT_RULES_CANNOT_OVERRIDE_CONSUMER_LAW,
+            POLICY_GUARDRAILS.AI_CANNOT_PROMISE_REFUND,
+          ]
+        : []),
+    ],
+    confidence,
+    productExclusion: exclusionResult,
+    recoveryOffers: [],
+    generateOfferLadderInvoked: false,
+    aiConfidenceBypassed: true,
+    aiPersuasionEnabled: false,
+  });
+}
+
+/**
+ * Merchant Settings Gate + Recovery Rules step of the pipeline.
+ * Only runs for non-excluded items (product exclusion is a pre-flight check).
+ *
+ * @param {{
+ *   merchantSettings?: Record<string, unknown> | null;
+ *   recoveryRules?: Array<Record<string, unknown>> | null;
+ *   context: {
+ *     primaryReason: string;
+ *     riskLevel: string;
+ *     orderTotal: number | null;
+ *   };
+ * }} input
+ */
+export function generateOfferLadder({
+  merchantSettings,
+  recoveryRules,
+  context,
+}) {
+  const settings = normalizeMerchantSettings(merchantSettings);
+  const ladderRules = getOfferLadderRules(recoveryRules)
+    .filter(isRuleEnabled)
+    .sort((left, right) => getRulePriority(left) - getRulePriority(right));
+
+  const offers = [];
+
+  for (const rule of ladderRules) {
+    if (!ruleMatchesRequest(rule, context)) {
+      continue;
+    }
+
+    const mapped = safeMapRuleAction(rule);
+    if (!isDecisionAllowed(mapped.decision, settings)) {
+      continue;
+    }
+
+    offers.push({
+      decision: mapped.decision,
+      ruleId: rule.id ?? null,
+      ruleName: rule.name ?? null,
+      ruleType: rule.type ?? mapped.decision,
+      unsafe: mapped.unsafe,
+    });
+  }
+
+  return {
+    offers,
+    primaryOffer: offers[0] ?? null,
+  };
+}
+
+export function isLegalReturnReason(returnRequest, items = []) {
+  return detectLegalReviewSignals(returnRequest, items).triggered;
+}
+
 function buildCustomerMessage({
   decision,
   reason,
@@ -642,6 +784,10 @@ function buildCustomerMessage({
 }) {
   if (reason === POLICY_REASONS.LEGAL_REVIEW_REQUIRED) {
     return "Thanks for sharing the issue. Your request needs to be reviewed by the merchant team before a final outcome is confirmed.";
+  }
+
+  if (secondaryReasons.includes(POLICY_REASONS.PRODUCT_EXCLUDED)) {
+    return "This product is excluded from automated return recovery. The merchant team will review your request and confirm the next step.";
   }
 
   if (legalFlags.includes(POLICY_REASONS.ACL_REFUND_RIGHTS_MAY_APPLY)) {
@@ -717,6 +863,11 @@ function buildResult({
   blockedOptions,
   guardrails = [],
   confidence,
+  productExclusion = null,
+  recoveryOffers = null,
+  generateOfferLadderInvoked = null,
+  aiConfidenceBypassed = null,
+  aiPersuasionEnabled = null,
 }) {
   const mergedGuardrails = [...new Set([...BASE_GUARDRAILS, ...guardrails])];
   const customerMessage = buildCustomerMessage({
@@ -747,6 +898,13 @@ function buildResult({
     confidence,
     customerMessage,
     merchantNote,
+    ...(productExclusion ? { productExclusion } : {}),
+    ...(recoveryOffers != null ? { recoveryOffers } : {}),
+    ...(generateOfferLadderInvoked != null
+      ? { generateOfferLadderInvoked }
+      : {}),
+    ...(aiConfidenceBypassed != null ? { aiConfidenceBypassed } : {}),
+    ...(aiPersuasionEnabled != null ? { aiPersuasionEnabled } : {}),
   };
 }
 
@@ -840,6 +998,66 @@ export function evaluateReturnPolicy({
   const legalFlags = [];
 
   const legalSignals = detectLegalReviewSignals(returnRequest, itemList);
+  const exclusionRule = findProductExclusionRule(recoveryRules);
+  const ladderRules = getOfferLadderRules(recoveryRules);
+  const primaryExclusionItem = getPrimaryItemForExclusion(
+    returnRequest,
+    itemList,
+  );
+  const exclusionResult = evaluateProductExclusion(
+    exclusionRule,
+    primaryExclusionItem,
+  );
+
+  // Task 32 pre-flight product exclusion (before offer ladder + legal-only paths
+  // that do not involve automated recovery). ACL-safe: legal excluded items use
+  // LEGAL_REVIEW_REQUIRED, never REJECT.
+  if (exclusionResult.productExcluded) {
+    if (legalSignals.triggered) {
+      if (isDamagedItemReason(primaryReason)) {
+        secondaryReasons.push(POLICY_REASONS.DAMAGED_ITEM_REQUIRES_REVIEW);
+      }
+
+      if (!deliveredAt) {
+        secondaryReasons.push(POLICY_REASONS.MISSING_DELIVERED_AT);
+      } else {
+        const outsideWindow = isOutsideReturnWindow({
+          deliveredAt,
+          returnWindowDays: settings.returnWindowDays,
+          windowExpiresAt: returnRequest?.windowExpiresAt,
+        });
+
+        if (outsideWindow === true) {
+          secondaryReasons.push(POLICY_REASONS.OUTSIDE_RETURN_WINDOW);
+        }
+      }
+
+      legalFlags.push(POLICY_REASONS.ACL_REFUND_RIGHTS_MAY_APPLY);
+      if (legalSignals.usedKeywordFallback) {
+        secondaryReasons.push(POLICY_REASONS.CONSUMER_LAW_OVERRIDE);
+      }
+
+      return buildExcludedProductResult({
+        exclusionResult,
+        reason: POLICY_REASONS.LEGAL_REVIEW_REQUIRED,
+        secondaryReasons,
+        legalFlags,
+        allowedOptions,
+        blockedOptions,
+        guardrails,
+      });
+    }
+
+    return buildExcludedProductResult({
+      exclusionResult,
+      reason: POLICY_REASONS.PRODUCT_EXCLUDED,
+      secondaryReasons,
+      legalFlags,
+      allowedOptions,
+      blockedOptions,
+      guardrails,
+    });
+  }
 
   if (legalSignals.insufficientInfo && !primaryReason) {
     return buildResult({
@@ -984,10 +1202,28 @@ export function evaluateReturnPolicy({
     });
   }
 
-  const matchedRule = findMatchingRule(recoveryRules, context);
+  const offerLadder = generateOfferLadder({
+    merchantSettings: settings,
+    recoveryRules: ladderRules,
+    context,
+  });
+  const matchedRule = offerLadder.primaryOffer
+    ? (ladderRules.find(
+        (rule) => rule.id === offerLadder.primaryOffer.ruleId,
+      ) ?? {
+        id: offerLadder.primaryOffer.ruleId,
+        name: offerLadder.primaryOffer.ruleName,
+        type: offerLadder.primaryOffer.ruleType,
+      })
+    : findMatchingRule(ladderRules, context);
 
-  if (matchedRule) {
-    const mapped = safeMapRuleAction(matchedRule);
+  if (matchedRule || offerLadder.primaryOffer) {
+    const mapped = offerLadder.primaryOffer
+      ? {
+          decision: offerLadder.primaryOffer.decision,
+          unsafe: offerLadder.primaryOffer.unsafe === true,
+        }
+      : safeMapRuleAction(matchedRule);
     const ruleGuardrails = mapped.unsafe
       ? [POLICY_GUARDRAILS.NO_AUTO_REFUND]
       : [];
@@ -1009,18 +1245,23 @@ export function evaluateReturnPolicy({
       reason,
       secondaryReasons: applied.secondaryReasons,
       legalFlags,
-      matchedRuleId: matchedRule.id ?? null,
-      matchedRuleName: matchedRule.name ?? null,
+      matchedRuleId:
+        offerLadder.primaryOffer?.ruleId ?? matchedRule?.id ?? null,
+      matchedRuleName:
+        offerLadder.primaryOffer?.ruleName ?? matchedRule?.name ?? null,
       allowedOptions,
       blockedOptions: applied.blockedOptions ?? blockedOptions,
       guardrails: applied.guardrails,
       confidence: applied.settingsBlocked ? "MEDIUM" : "HIGH",
+      recoveryOffers: offerLadder.offers,
+      generateOfferLadderInvoked: true,
+      aiPersuasionEnabled: offerLadder.offers.length > 0,
     });
   }
 
   const fallbackDecision = chooseDefaultRecoveryPath(settings, allowedOptions);
   const noRuleReason =
-    Array.isArray(recoveryRules) && recoveryRules.some(isRuleEnabled)
+    Array.isArray(ladderRules) && ladderRules.some(isRuleEnabled)
       ? POLICY_REASONS.NO_MATCHING_RULE
       : POLICY_REASONS.DEFAULT_RECOVERY_PATH;
 

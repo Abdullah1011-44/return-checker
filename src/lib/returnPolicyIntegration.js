@@ -69,9 +69,17 @@ export function buildPolicyItemsFromOrderItems(orderItems = []) {
   return orderItems.map((orderItem) => ({
     reason: null,
     isReturnable: orderItem.isReturnable,
+    sku: orderItem.sku,
+    shopifyProductId: orderItem.shopifyProductId,
+    shopifyVariantId: orderItem.shopifyVariantId,
+    productName: orderItem.productName,
+    product: orderItem.product,
     orderItem: {
       isReturnable: orderItem.isReturnable,
       finalSale: orderItem.isReturnable === false,
+      sku: orderItem.sku,
+      shopifyVariantId: orderItem.shopifyVariantId,
+      productName: orderItem.productName,
     },
   }));
 }
@@ -93,9 +101,17 @@ export function buildPolicyItemsFromSubmission(
       comment: requestItem.comment?.trim() || null,
       riskLevel: riskPrismaForReason(reasonKey),
       isReturnable: orderItem.isReturnable,
+      sku: orderItem.sku,
+      shopifyProductId: orderItem.shopifyProductId,
+      shopifyVariantId: orderItem.shopifyVariantId,
+      productName: orderItem.productName,
+      product: orderItem.product,
       orderItem: {
         isReturnable: orderItem.isReturnable,
         finalSale: orderItem.isReturnable === false,
+        sku: orderItem.sku,
+        shopifyVariantId: orderItem.shopifyVariantId,
+        productName: orderItem.productName,
       },
     };
   });
