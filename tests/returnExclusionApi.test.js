@@ -543,6 +543,11 @@ describe("dynamic offer ladder API responses", () => {
     assertDynamicOfferLadderShape(body.items[0].dynamicOfferLadder);
     expect(body.items[0].recommendedAction).toBeDefined();
     expect(body.orderEligible).toBe(true);
+    expect(body.items[0].reasonIntelligence).toMatchObject({
+      reasonGroup: expect.any(String),
+      merchantInsightTags: expect.any(Array),
+      productContextTags: expect.any(Array),
+    });
   });
 
   it("submit-return returns dynamicOfferLadder on itemDecisions and single-item top level", async () => {
@@ -684,6 +689,17 @@ describe("dynamic offer ladder API responses", () => {
       OFFER_TYPES.EXCHANGE,
     );
     expect(body.dynamicOfferLadder.primaryOffer.enabled).toBe(true);
+    expect(body.itemDecisions[0].reasonIntelligence).toMatchObject({
+      normalizedReason: "wrong_size",
+      reasonGroup: "fit_issue",
+      recommendedNextStep: "offer_exchange_first",
+      merchantInsightTags: expect.any(Array),
+      productContextTags: expect.any(Array),
+    });
+    expect(body.reasonIntelligence).toMatchObject({
+      normalizedReason: "wrong_size",
+      reasonGroup: "fit_issue",
+    });
   });
 
   it("exchange is not primary when exchangeStockAvailable is false", async () => {

@@ -133,6 +133,9 @@ export function serializeItemRecoveryDecision({
     ...(pipelineResult.dynamicOfferLadder
       ? { dynamicOfferLadder: pipelineResult.dynamicOfferLadder }
       : {}),
+    ...(pipelineResult.reasonIntelligence
+      ? { reasonIntelligence: pipelineResult.reasonIntelligence }
+      : {}),
   };
 
   if (productExcluded) {
@@ -203,6 +206,9 @@ export function mergeCheckItemWithDecision(checkItem, decision) {
     ...(decision.dynamicOfferLadder
       ? { dynamicOfferLadder: decision.dynamicOfferLadder }
       : {}),
+    ...(decision.reasonIntelligence
+      ? { reasonIntelligence: decision.reasonIntelligence }
+      : {}),
   };
 }
 
@@ -236,6 +242,9 @@ export function buildSingleItemTopLevelFields(decision) {
     ...(decision.dynamicOfferLadder
       ? { dynamicOfferLadder: decision.dynamicOfferLadder }
       : {}),
+    ...(decision.reasonIntelligence
+      ? { reasonIntelligence: decision.reasonIntelligence }
+      : {}),
   };
 }
 
@@ -246,6 +255,8 @@ function buildOrderItemContext(orderItem) {
     shopifyVariantId: orderItem.shopifyVariantId,
     productName: orderItem.productName,
     title: orderItem.productName,
+    productType:
+      orderItem.productType ?? orderItem.product?.productType ?? null,
     product: orderItem.product,
     orderItem,
   };
@@ -289,6 +300,7 @@ function buildLadderContextFromOrderItem(orderItem, ladderContext) {
  *   merchantRules?: Record<string, unknown> | null;
  *   policyDecision?: Record<string, unknown> | null;
  *   ladderContext?: Record<string, unknown> | null;
+ *   recoveryOption?: string | null;
  *   generateOfferLadderFn?: Parameters<typeof evaluateItemRecoveryPipeline>[0]["generateOfferLadderFn"];
  *   buildDynamicOfferLadderFn?: Parameters<typeof evaluateItemRecoveryPipeline>[0]["buildDynamicOfferLadderFn"];
  * }} input
@@ -305,6 +317,7 @@ export function evaluateOrderItemRecoveryDecision({
   merchantRules = null,
   policyDecision = null,
   ladderContext = null,
+  recoveryOption = null,
   generateOfferLadderFn,
   buildDynamicOfferLadderFn,
 }) {
@@ -332,6 +345,8 @@ export function evaluateOrderItemRecoveryDecision({
       riskLevel: returnReason ? riskPrismaForReason(reasonKey) : "MEDIUM",
       orderTotal: order?.totalAmount != null ? Number(order.totalAmount) : null,
     },
+    storeType: merchantSettings?.storeType ?? null,
+    recoveryOption,
     generateOfferLadderFn,
     buildDynamicOfferLadderFn,
   });
@@ -530,6 +545,7 @@ export async function evaluateSubmitReturnItemDecisions({
       orderItem,
       returnReason: requestItem.returnReason,
       comment: requestItem.comment,
+      recoveryOption: requestItem.selectedOption ?? null,
       merchantSettings,
       recoveryRules: policyRules ?? [],
       productExclusionRule,

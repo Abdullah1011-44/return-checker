@@ -510,3 +510,185 @@ describe("recoveryItemPipeline", () => {
     expect(result.reason).toBe(POLICY_REASONS.NO_SAFE_OPTION);
   });
 });
+
+describe("reasonIntelligence integration", () => {
+  const reasonIntelligenceShape = {
+    inputReason: expect.any(String),
+    normalizedReason: expect.any(String),
+    reasonGroup: expect.any(String),
+    severity: expect.any(String),
+    customerIntent: expect.any(String),
+    recoveryOpportunity: expect.any(String),
+    recommendedNextStep: expect.any(String),
+    followUpNeeded: expect.any(Boolean),
+    followUpType: expect.anything(),
+    merchantInsightTags: expect.any(Array),
+    confidence: expect.any(Number),
+    storeType: expect.any(String),
+    productType: null,
+    productContextTags: expect.any(Array),
+    qualityIssueType: expect.any(String),
+  };
+
+  it("includes reasonIntelligence on every evaluated item result", () => {
+    const paths = [
+      {
+        itemContext: { sku: "TEE-001" },
+        returnReason: "WRONG_SIZE",
+        customerReason: "wrong_size",
+        recoveryRules: ladderRules,
+        recoveryScore: 92,
+        aiConfidenceThreshold: 0.7,
+      },
+      {
+        itemContext: { sku: "FINAL-SALE-001" },
+        returnReason: "CHANGED_MIND",
+        customerReason: "changed_mind",
+        recoveryRules: [exclusionRule],
+      },
+    ];
+
+    for (const input of paths) {
+      const result = evaluateItemRecoveryPipeline({
+        merchantSettings,
+        ...input,
+      });
+
+      expect(result.reasonIntelligence).toMatchObject(reasonIntelligenceShape);
+    }
+  });
+
+  it("wrong_size item includes fit_issue and offer_exchange_first", () => {
+    const result = evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001" },
+      returnReason: "WRONG_SIZE",
+      customerReason: "wrong_size",
+      merchantSettings,
+      recoveryRules: ladderRules,
+      recoveryScore: 92,
+      aiConfidenceThreshold: 0.7,
+    });
+
+    expect(result.reasonIntelligence.reasonGroup).toBe("fit_issue");
+    expect(result.reasonIntelligence.recommendedNextStep).toBe(
+      "offer_exchange_first",
+    );
+    expect(result.reasonIntelligence.normalizedReason).toBe("wrong_size");
+  });
+
+  it("damaged_item includes quality_issue, qualityIssueType, and manual review next step", () => {
+    const result = evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001" },
+      returnReason: "DAMAGED_ITEM",
+      customerReason: "damaged_item",
+      merchantSettings,
+      recoveryRules: ladderRules,
+      recoveryScore: 92,
+      aiConfidenceThreshold: 0.7,
+    });
+
+    expect(result.reasonIntelligence.reasonGroup).toBe("quality_issue");
+    expect(result.reasonIntelligence.qualityIssueType).toBe("damage_issue");
+    expect(result.reasonIntelligence.recommendedNextStep).toBe(
+      "manual_review_or_photo_check",
+    );
+  });
+
+  it('other + comment "too small" normalizes to wrong_size', () => {
+    const result = evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001" },
+      returnReason: "OTHER",
+      customerReason: "other",
+      comment: "too small",
+      merchantSettings,
+      recoveryRules: ladderRules,
+      recoveryScore: 92,
+      aiConfidenceThreshold: 0.7,
+    });
+
+    expect(result.reasonIntelligence.normalizedReason).toBe("wrong_size");
+    expect(result.reasonIntelligence.reasonGroup).toBe("fit_issue");
+  });
+
+  it('other + comment "not as described" creates description_mismatch quality issue', () => {
+    const result = evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001" },
+      returnReason: "OTHER",
+      customerReason: "other",
+      comment: "not as described",
+      merchantSettings,
+      recoveryRules: ladderRules,
+      recoveryScore: 92,
+      aiConfidenceThreshold: 0.7,
+    });
+
+    expect(result.reasonIntelligence.reasonGroup).toBe("quality_issue");
+    expect(result.reasonIntelligence.qualityIssueType).toBe(
+      "description_mismatch",
+    );
+  });
+
+  it('other + comment "poor quality" creates material_quality_issue', () => {
+    const result = evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001" },
+      returnReason: "OTHER",
+      customerReason: "other",
+      comment: "poor quality",
+      merchantSettings,
+      recoveryRules: ladderRules,
+      recoveryScore: 92,
+      aiConfidenceThreshold: 0.7,
+    });
+
+    expect(result.reasonIntelligence.reasonGroup).toBe("quality_issue");
+    expect(result.reasonIntelligence.qualityIssueType).toBe(
+      "material_quality_issue",
+    );
+  });
+
+  it('changed_mind + comment "not working" normalizes to damaged_item with defect_issue', () => {
+    const result = evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001" },
+      returnReason: "CHANGED_MIND",
+      customerReason: "changed_mind",
+      comment: "not working",
+      merchantSettings,
+      recoveryRules: ladderRules,
+      recoveryScore: 92,
+      aiConfidenceThreshold: 0.7,
+    });
+
+    expect(result.reasonIntelligence.normalizedReason).toBe("damaged_item");
+    expect(result.reasonIntelligence.qualityIssueType).toBe("defect_issue");
+    expect(result.reasonIntelligence.reasonGroup).toBe("quality_issue");
+  });
+
+  it("excluded items still include reasonIntelligence", () => {
+    const result = evaluateItemRecoveryPipeline({
+      itemContext: { sku: "FINAL-SALE-001" },
+      returnReason: "WRONG_SIZE",
+      customerReason: "wrong_size",
+      recoveryRules: [exclusionRule],
+    });
+
+    expect(result.productExcluded).toBe(true);
+    expect(result.reasonIntelligence).toMatchObject(reasonIntelligenceShape);
+    expect(result.reasonIntelligence.reasonGroup).toBe("fit_issue");
+  });
+
+  it("reasonIntelligence does not override exclusion decision", () => {
+    const result = evaluateItemRecoveryPipeline({
+      itemContext: { sku: "FINAL-SALE-001" },
+      returnReason: "WRONG_SIZE",
+      customerReason: "wrong_size",
+      recoveryRules: [exclusionRule],
+    });
+
+    expect(result.productExcluded).toBe(true);
+    expect(result.reason).toBe(POLICY_REASONS.PRODUCT_EXCLUDED);
+    expect(result.decision).toBe(POLICY_DECISIONS.MANUAL_REVIEW);
+    expect(result.reasonIntelligence.recommendedNextStep).toBe(
+      "offer_exchange_first",
+    );
+  });
+});

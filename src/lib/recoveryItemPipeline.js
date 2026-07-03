@@ -26,6 +26,7 @@ import {
   POLICY_DECISIONS,
   POLICY_REASONS,
 } from "@/lib/returnPolicyEngine";
+import { analyzeReturnReason } from "@/lib/returnReasonIntelligence";
 
 function buildFlatMerchantRulesFromSettings(merchantSettings) {
   if (!merchantSettings || typeof merchantSettings !== "object") {
@@ -154,6 +155,86 @@ function attachDynamicOfferLadder(
   };
 }
 
+function extractProductTitle(itemContext) {
+  return (
+    itemContext?.productName ??
+    itemContext?.title ??
+    itemContext?.orderItem?.productName ??
+    null
+  );
+}
+
+function extractProductType(itemContext) {
+  return (
+    itemContext?.productType ??
+    itemContext?.product?.productType ??
+    itemContext?.orderItem?.productType ??
+    itemContext?.orderItem?.product?.productType ??
+    null
+  );
+}
+
+function resolvePipelineStoreType(merchantSettings, storeType) {
+  return storeType ?? merchantSettings?.storeType ?? null;
+}
+
+/**
+ * @param {{
+ *   itemContext: Record<string, unknown>;
+ *   returnReason?: string | null;
+ *   customerReason?: string | null;
+ *   comment?: string | null;
+ *   merchantSettings?: Record<string, unknown> | null;
+ *   storeType?: string | null;
+ *   recoveryOption?: string | null;
+ *   analyzeReturnReasonFn?: typeof analyzeReturnReason;
+ * }} input
+ */
+export function buildReasonIntelligence({
+  itemContext,
+  returnReason = null,
+  customerReason = null,
+  comment = null,
+  merchantSettings = null,
+  storeType = null,
+  recoveryOption = null,
+  analyzeReturnReasonFn = analyzeReturnReason,
+}) {
+  const analysis = analyzeReturnReasonFn({
+    reason: customerReason ?? returnReason ?? null,
+    comment,
+    productTitle: extractProductTitle(itemContext),
+    productType: extractProductType(itemContext),
+    storeType: resolvePipelineStoreType(merchantSettings, storeType),
+    recoveryOption,
+  });
+
+  return {
+    inputReason: analysis.inputReason,
+    normalizedReason: analysis.normalizedReason,
+    reasonGroup: analysis.reasonGroup,
+    severity: analysis.severity,
+    customerIntent: analysis.customerIntent,
+    recoveryOpportunity: analysis.recoveryOpportunity,
+    recommendedNextStep: analysis.recommendedNextStep,
+    followUpNeeded: analysis.followUpNeeded,
+    followUpType: analysis.followUpType,
+    merchantInsightTags: analysis.merchantInsightTags,
+    confidence: analysis.confidence,
+    storeType: analysis.storeType,
+    productType: analysis.productType,
+    productContextTags: analysis.productContextTags,
+    qualityIssueType: analysis.qualityIssueType,
+  };
+}
+
+function attachReasonIntelligence(result, reasonIntelligence) {
+  return {
+    ...result,
+    reasonIntelligence,
+  };
+}
+
 function passesAiConfidenceThreshold(recoveryScore, aiConfidenceThreshold) {
   if (aiConfidenceThreshold == null) {
     return true;
@@ -242,8 +323,11 @@ function buildExcludedItemPipelineResult(
  *     matchedExchangeVariantId?: string | null;
  *     matchedExchangeVariantTitle?: string | null;
  *   } | null;
+ *   storeType?: string | null;
+ *   recoveryOption?: string | null;
  *   generateOfferLadderFn?: typeof generateOfferLadder;
  *   buildDynamicOfferLadderFn?: typeof buildDynamicOfferLadder;
+ *   analyzeReturnReasonFn?: typeof analyzeReturnReason;
  * }} input
  */
 export function evaluateItemRecoveryPipeline({
@@ -261,14 +345,27 @@ export function evaluateItemRecoveryPipeline({
   order = null,
   policyDecision: externalPolicyDecision = null,
   ladderContext = null,
+  storeType = null,
+  recoveryOption = null,
   generateOfferLadderFn = generateOfferLadder,
   buildDynamicOfferLadderFn = buildDynamicOfferLadder,
+  analyzeReturnReasonFn = analyzeReturnReason,
 }) {
   const exclusionRule =
     productExclusionRule ?? findProductExclusionRule(recoveryRules);
   const exclusionResult = evaluateProductExclusion(exclusionRule, itemContext);
   const resolvedCustomerReason =
     customerReason ?? policyContext.primaryReason ?? returnReason ?? "";
+  const reasonIntelligence = buildReasonIntelligence({
+    itemContext,
+    returnReason,
+    customerReason: resolvedCustomerReason,
+    comment,
+    merchantSettings,
+    storeType,
+    recoveryOption,
+    analyzeReturnReasonFn,
+  });
   const explicitMerchantRules = mergeExplicitMerchantRules(
     buildFlatMerchantRulesFromSettings(merchantSettings),
     merchantRules,
@@ -290,18 +387,21 @@ export function evaluateItemRecoveryPipeline({
       manualReviewRequired,
     });
 
-    return attachDynamicOfferLadder(result, {
-      item: itemContext,
-      order,
-      customerReason: resolvedCustomerReason,
-      policyDecision: resolvedPolicyDecision,
-      exclusionDecision,
-      recoveryDecision,
-      merchantRules: explicitMerchantRules,
-      recoveryRules,
-      context: ladderContext ?? {},
-      buildDynamicOfferLadderFn,
-    });
+    return attachDynamicOfferLadder(
+      attachReasonIntelligence(result, reasonIntelligence),
+      {
+        item: itemContext,
+        order,
+        customerReason: resolvedCustomerReason,
+        policyDecision: resolvedPolicyDecision,
+        exclusionDecision,
+        recoveryDecision,
+        merchantRules: explicitMerchantRules,
+        recoveryRules,
+        context: ladderContext ?? {},
+        buildDynamicOfferLadderFn,
+      },
+    );
   }
 
   // Pre-flight product exclusion: skip merchant settings, recovery rules,

@@ -15,6 +15,197 @@ const reasonLabels = {
   other: "Other",
 };
 
+const MAX_INSIGHT_TAGS = 4;
+
+const reasonGroupLabels = {
+  fit_issue: "Fit issue",
+  quality_issue: "Quality issue",
+  preference_issue: "Preference issue",
+  fulfillment_issue: "Fulfilment issue",
+  dimension_issue: "Dimension issue",
+  unclear: "Needs clarification",
+};
+
+const qualityIssueTypeLabels = {
+  defect_issue: "Defect issue",
+  damage_issue: "Damage issue",
+  material_quality_issue: "Material quality issue",
+  durability_issue: "Durability issue",
+  finish_issue: "Finish issue",
+  authenticity_issue: "Authenticity concern",
+  missing_parts_issue: "Missing parts issue",
+  description_mismatch: "Description mismatch",
+  safety_sensitive_issue: "Safety-sensitive issue",
+  not_quality_related: "Not quality-related",
+};
+
+const recoveryOpportunityLabels = {
+  high: "High recovery opportunity",
+  medium: "Medium recovery opportunity",
+  low: "Low recovery opportunity",
+};
+
+const recommendedNextStepLabels = {
+  offer_exchange_first: "Offer exchange first",
+  manual_review_or_photo_check: "Review photos/details",
+  manual_review_or_safety_check: "Review safety details",
+  offer_store_credit_or_exchange: "Offer store credit or exchange",
+  offer_store_credit_with_apology: "Offer store credit with apology",
+  ask_clarifying_question: "Ask a follow-up question",
+  check_policy_before_offer: "Check policy before offer",
+};
+
+const merchantInsightTagLabels = {
+  fit_issue: "Fit issue",
+  exchange_opportunity: "Exchange opportunity",
+  quality_issue: "Quality issue",
+  manual_review: "Manual review",
+  preference_issue: "Preference issue",
+  store_credit_opportunity: "Store credit opportunity",
+  fulfillment_issue: "Fulfilment issue",
+  needs_clarification: "Needs clarification",
+  comfort_issue: "Comfort issue",
+  fault_issue: "Fault issue",
+  safety_sensitive: "Safety-sensitive",
+  safety_sensitive_issue: "Safety-sensitive issue",
+  dimension_issue: "Dimension issue",
+  policy_sensitive: "Policy-sensitive",
+  defect_issue: "Defect issue",
+  damage_issue: "Damage issue",
+  material_quality_issue: "Material quality issue",
+  durability_issue: "Durability issue",
+  finish_issue: "Finish issue",
+  authenticity_issue: "Authenticity concern",
+  missing_parts_issue: "Missing parts issue",
+  description_mismatch: "Description mismatch",
+  listing_expectation_issue: "Listing expectation issue",
+};
+
+function formatReadableEnum(value) {
+  if (!value) {
+    return null;
+  }
+
+  return String(value)
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function mapInsightLabel(value, labels) {
+  if (!value) {
+    return null;
+  }
+
+  return labels[value] ?? formatReadableEnum(value);
+}
+
+function getDisplayInsightTags(tags, limit = MAX_INSIGHT_TAGS) {
+  if (!Array.isArray(tags) || tags.length === 0) {
+    return [];
+  }
+
+  const seen = new Set();
+  const displayTags = [];
+
+  for (const tag of tags) {
+    const label = mapInsightLabel(tag, merchantInsightTagLabels);
+    if (!label || seen.has(label)) {
+      continue;
+    }
+
+    seen.add(label);
+    displayTags.push(label);
+
+    if (displayTags.length >= limit) {
+      break;
+    }
+  }
+
+  return displayTags;
+}
+
+function ReasonIntelligenceSummary({ reasonIntelligence }) {
+  if (!reasonIntelligence) {
+    return null;
+  }
+
+  const reasonInsight = mapInsightLabel(
+    reasonIntelligence.reasonGroup,
+    reasonGroupLabels,
+  );
+  const qualityIssueType = reasonIntelligence.qualityIssueType;
+  const qualityInsight =
+    qualityIssueType && qualityIssueType !== "not_quality_related"
+      ? mapInsightLabel(qualityIssueType, qualityIssueTypeLabels)
+      : null;
+  const recoveryOpportunity = mapInsightLabel(
+    reasonIntelligence.recoveryOpportunity,
+    recoveryOpportunityLabels,
+  );
+  const suggestedNextStep = mapInsightLabel(
+    reasonIntelligence.recommendedNextStep,
+    recommendedNextStepLabels,
+  );
+  const tags = getDisplayInsightTags(reasonIntelligence.merchantInsightTags);
+
+  if (
+    !reasonInsight &&
+    !qualityInsight &&
+    !recoveryOpportunity &&
+    !suggestedNextStep &&
+    tags.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="border-t border-slate-200 pt-2 space-y-1">
+      {reasonInsight && (
+        <p className="text-xs text-slate-600">
+          <span className="font-semibold text-slate-700">Reason insight:</span>{" "}
+          {reasonInsight}
+        </p>
+      )}
+      {qualityInsight && (
+        <p className="text-xs text-slate-600">
+          <span className="font-semibold text-slate-700">Quality insight:</span>{" "}
+          {qualityInsight}
+        </p>
+      )}
+      {recoveryOpportunity && (
+        <p className="text-xs text-slate-600">
+          <span className="font-semibold text-slate-700">
+            Recovery opportunity:
+          </span>{" "}
+          {recoveryOpportunity}
+        </p>
+      )}
+      {suggestedNextStep && (
+        <p className="text-xs text-slate-600">
+          <span className="font-semibold text-slate-700">
+            Suggested next step:
+          </span>{" "}
+          {suggestedNextStep}
+        </p>
+      )}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          <span className="text-xs font-semibold text-slate-700">Tags:</span>
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function normalizeDashboardItem(item) {
   const returnReason = item.returnReason || "";
   const proofSrc =
@@ -36,6 +227,9 @@ function normalizeDashboardItem(item) {
     proofImage: proofSrc,
     recommendedAction:
       item.recommendedAction || getItemRecommendedAction(returnReason),
+    ...(item.reasonIntelligence
+      ? { reasonIntelligence: item.reasonIntelligence }
+      : {}),
   };
 }
 
@@ -236,6 +430,10 @@ export default function RequestCard({
                       {item.proofImageName || "No proof uploaded"}
                     </p>
                   </div>
+
+                  <ReasonIntelligenceSummary
+                    reasonIntelligence={item.reasonIntelligence}
+                  />
 
                   {item.proofImage && (
                     <a

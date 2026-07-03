@@ -46,3 +46,56 @@ describe("dashboardMapper order status", () => {
     });
   });
 });
+
+describe("dashboardMapper reasonIntelligence", () => {
+  it("computes reasonIntelligence for each return item from stored data", () => {
+    const result = mapReturnRequestToDashboard(
+      {
+        id: "return-3",
+        status: "PENDING",
+        customerEmail: "customer@example.com",
+        createdAt: new Date("2026-06-01T00:00:00Z"),
+        updatedAt: new Date("2026-06-01T00:00:00Z"),
+        order: {
+          orderNumber: "1001",
+          status: "FULFILLED",
+          financialStatus: "paid",
+          fulfillmentStatus: "fulfilled",
+          cancelledAt: null,
+          items: [],
+        },
+        items: [
+          {
+            id: "return-item-1",
+            orderItemId: "order-item-1",
+            reason: "WRONG_SIZE",
+            comment: "too small",
+            selectedOption: "EXCHANGE",
+            recoveryScore: 92,
+            riskLevel: "LOW",
+            bestAction: "Exchange Product",
+            orderItem: {
+              id: "order-item-1",
+              productName: "Classic Tee",
+              sku: "TEE-001",
+              quantity: 1,
+              price: 29.99,
+            },
+          },
+        ],
+      },
+      { storeType: "FASHION" },
+    );
+
+    expect(result.selectedItems[0].reasonIntelligence).toMatchObject({
+      normalizedReason: "wrong_size",
+      reasonGroup: "fit_issue",
+      recommendedNextStep: "offer_exchange_first",
+      merchantInsightTags: expect.any(Array),
+      productContextTags: expect.any(Array),
+      storeType: "fashion",
+      productType: null,
+      qualityIssueType: "not_quality_related",
+    });
+  });
+});

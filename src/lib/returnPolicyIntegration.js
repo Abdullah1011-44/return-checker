@@ -59,6 +59,7 @@ export function buildMerchantSettingsForPolicy(merchant, settings) {
     allowPartialRefund:
       settings?.allowPartialRefund ?? merchant?.allowPartialRefund,
     allowManualReviewFallback: true,
+    storeType: settings?.storeType ?? null,
   };
 }
 

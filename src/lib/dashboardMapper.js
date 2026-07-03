@@ -1,4 +1,5 @@
 import { isDisplayableImageSrc, parseProofImage } from "@/lib/proofImageUrl";
+import { buildReasonIntelligence } from "@/lib/recoveryItemPipeline";
 import {
   bestActionForReason,
   getPrimaryReasonKey,
@@ -58,7 +59,7 @@ function riskUiFromPrisma(riskLevel) {
   return "Medium";
 }
 
-function mapReturnItemToUi(returnItem) {
+function mapReturnItemToUi(returnItem, { storeType = null } = {}) {
   const orderItem = returnItem.orderItem;
   const returnReason = REASON_TO_UI[returnItem.reason] ?? "other";
   const reasonKey = reasonKeyFromUiOrPrisma(returnItem.reason);
@@ -69,6 +70,23 @@ function mapReturnItemToUi(returnItem) {
     : riskUiForReason(reasonKey);
   const recommendedAction =
     returnItem.bestAction ?? bestActionForReason(reasonKey);
+  const selectedOption =
+    RECOVERY_TO_UI[returnItem.selectedOption] ?? returnItem.selectedOption;
+  const reasonIntelligence = buildReasonIntelligence({
+    itemContext: {
+      productName: orderItem?.productName,
+      title: orderItem?.productName,
+      productType:
+        orderItem?.productType ?? orderItem?.product?.productType ?? null,
+      product: orderItem?.product,
+      orderItem,
+    },
+    returnReason: returnItem.reason,
+    customerReason: returnReason,
+    comment: returnItem.comment,
+    storeType,
+    recoveryOption: selectedOption,
+  });
 
   return {
     id: returnItem.id,
@@ -79,8 +97,7 @@ function mapReturnItemToUi(returnItem) {
     price: orderItem?.price != null ? Number(orderItem.price) : 0,
     returnReason,
     comment: returnItem.comment ?? "",
-    selectedOption:
-      RECOVERY_TO_UI[returnItem.selectedOption] ?? returnItem.selectedOption,
+    selectedOption,
     proofImageName: proof.fileName || "",
     proofImage: isDisplayableImageSrc(proof.src) ? proof.src : "",
     imageUrl: proof.src || returnItem.imageUrl || "",
@@ -89,6 +106,7 @@ function mapReturnItemToUi(returnItem) {
     bestAction: recommendedAction,
     aiSummary: returnItem.aiSummary ?? "",
     recommendedAction,
+    reasonIntelligence,
   };
 }
 
@@ -112,8 +130,11 @@ function mapOrderStatusForDashboard(order) {
   };
 }
 
-export function mapReturnRequestToDashboard(returnRequest) {
-  const selectedItems = (returnRequest.items ?? []).map(mapReturnItemToUi);
+export function mapReturnRequestToDashboard(returnRequest, options = {}) {
+  const { storeType = null } = options;
+  const selectedItems = (returnRequest.items ?? []).map((item) =>
+    mapReturnItemToUi(item, { storeType }),
+  );
   const primaryReason = getPrimaryReasonKey(
     selectedItems.map((item) => ({ returnReason: item.returnReason })),
   );
