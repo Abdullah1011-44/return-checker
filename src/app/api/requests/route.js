@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
+import {
+  aggregateOfferAcceptanceMetrics,
+  buildOfferAcceptanceByReturnItemId,
+  loadMerchantOfferAcceptances,
+} from "@/lib/offerAcceptanceAnalytics";
 import { prisma } from "@/lib/prisma";
 import { captureException } from "@/lib/sentry";
 
@@ -15,7 +20,7 @@ export async function GET(request) {
 
     merchant = auth.merchant;
 
-    const [returnRequests, settings] = await Promise.all([
+    const [returnRequests, settings, offerAcceptances] = await Promise.all([
       prisma.returnRequest.findMany({
         where: { merchantId: merchant.id },
         orderBy: { submittedAt: "desc" },
@@ -39,17 +44,28 @@ export async function GET(request) {
       prisma.merchantSettings.findUnique({
         where: { merchantId: merchant.id },
       }),
+      loadMerchantOfferAcceptances(prisma, merchant.id),
     ]);
+
+    const offerAcceptanceByReturnItemId =
+      buildOfferAcceptanceByReturnItemId(offerAcceptances);
 
     const requests = returnRequests.map((returnRequest) =>
       mapReturnRequestToDashboard(returnRequest, {
         storeType: settings?.storeType ?? null,
+        offerAcceptanceByReturnItemId,
       }),
+    );
+
+    const offerAcceptanceSummary = aggregateOfferAcceptanceMetrics(
+      offerAcceptances,
+      { currency: merchant.currency ?? "AUD" },
     );
 
     return NextResponse.json({
       success: true,
       requests,
+      offerAcceptanceSummary,
     });
   } catch (error) {
     captureException(error, {

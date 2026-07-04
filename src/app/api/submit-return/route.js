@@ -34,6 +34,7 @@ import {
   scoreForReason,
 } from "@/lib/returnScoring";
 import { captureException } from "@/lib/sentry";
+import { recordSubmitReturnOfferAcceptancesSafely } from "@/lib/submitReturnOfferAcceptance";
 import {
   parseJsonBody,
   submitReturnSchema,
@@ -168,6 +169,7 @@ export async function POST(request) {
         recoveryRules: order.recoveryRules,
         order,
         matchedOrderItems,
+
         returnRequestItems,
         windowExpiresAt,
       });
@@ -249,6 +251,22 @@ export async function POST(request) {
           },
           events: true,
         },
+      });
+    });
+
+    await recordSubmitReturnOfferAcceptancesSafely({
+      merchantId,
+      returnRequest,
+      returnRequestItems,
+      matchedOrderItems,
+      itemDecisions,
+      recoveryRules: order.recoveryRules,
+      order,
+    }).catch((error) => {
+      console.warn("[OfferAcceptance] submit-return tracking batch failed", {
+        returnRequestId: returnRequest.id,
+        errorName: error?.name ?? "Error",
+        message: error?.message ?? "unknown_error",
       });
     });
 

@@ -99,3 +99,47 @@ describe("dashboardMapper reasonIntelligence", () => {
     });
   });
 });
+
+describe("dashboardMapper offerAcceptance", () => {
+  it("maps acceptance onto return items via offerAcceptanceByReturnItemId", () => {
+    const acceptanceMap = new Map([
+      [
+        "return-item-1",
+        {
+          acceptedOfferType: "EXCHANGE",
+          offerSource: "CUSTOMER_SELECTED",
+          recoveryAmountCents: 2999,
+          currency: "AUD",
+          legalReviewRequired: false,
+        },
+      ],
+    ]);
+
+    const result = mapReturnRequestToDashboard(
+      {
+        id: "return-4",
+        status: "PENDING",
+        customerEmail: "customer@example.com",
+        createdAt: new Date("2026-06-01T00:00:00Z"),
+        updatedAt: new Date("2026-06-01T00:00:00Z"),
+        items: [
+          {
+            id: "return-item-1",
+            orderItemId: "order-item-1",
+            reason: "WRONG_SIZE",
+            orderItem: {
+              productName: "Classic Tee",
+              sku: "TEE-001",
+              quantity: 1,
+              price: 29.99,
+            },
+          },
+        ],
+      },
+      { offerAcceptanceByReturnItemId: acceptanceMap },
+    );
+
+    expect(result.selectedItems[0].acceptedOfferLabel).toBe("Exchange");
+    expect(result.selectedItems[0].estimatedRecoveredAmountCents).toBe(2999);
+  });
+});

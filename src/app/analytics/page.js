@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchMerchantJson, getApiErrorMessage } from "@/lib/dashboardFetch";
+import {
+  fetchMerchantJson,
+  getApiErrorMessage,
+  readObjectField,
+} from "@/lib/dashboardFetch";
 
 // Human-readable labels for return reason codes
 const reasonLabels = {
@@ -180,6 +184,7 @@ function BreakdownRow({ label, count, total }) {
 
 export default function AnalyticsPage() {
   const [requests, setRequests] = useState([]);
+  const [offerAcceptanceSummary, setOfferAcceptanceSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -193,6 +198,7 @@ export default function AnalyticsPage() {
       if (aborted) {
         setLoadError("Could not load analytics.");
         setRequests([]);
+        setOfferAcceptanceSummary(null);
         return;
       }
 
@@ -201,11 +207,15 @@ export default function AnalyticsPage() {
           getApiErrorMessage(res, data, "Could not load analytics."),
         );
         setRequests([]);
+        setOfferAcceptanceSummary(null);
         return;
       }
 
       const nextRequests = Array.isArray(data.requests) ? data.requests : [];
       setRequests(nextRequests);
+      setOfferAcceptanceSummary(
+        readObjectField(data, "offerAcceptanceSummary"),
+      );
       setLoadError("");
     } catch (error) {
       console.error("[analytics] Failed to load analytics data.", {
@@ -213,6 +223,7 @@ export default function AnalyticsPage() {
       });
       setLoadError("Could not load analytics.");
       setRequests([]);
+      setOfferAcceptanceSummary(null);
     } finally {
       setLoading(false);
     }
@@ -249,6 +260,76 @@ export default function AnalyticsPage() {
     null,
     ALL_OPTIONS,
   );
+
+  const acceptance = offerAcceptanceSummary ?? {
+    totalAcceptedOffers: 0,
+    acceptedExchangeCount: 0,
+    acceptedStoreCreditCount: 0,
+    acceptedPartialRefundCount: 0,
+    manualReviewCount: 0,
+    legalReviewRequiredCount: 0,
+    estimatedRecoveredAmountDisplay: "$0.00",
+    acceptanceByOfferType: {},
+    acceptanceBySource: {},
+  };
+
+  const offerTypeBreakdown = [
+    {
+      key: "EXCHANGE",
+      label: "Exchange",
+      count: acceptance.acceptedExchangeCount ?? 0,
+    },
+    {
+      key: "STORE_CREDIT",
+      label: "Store Credit",
+      count: acceptance.acceptedStoreCreditCount ?? 0,
+    },
+    {
+      key: "PARTIAL_REFUND",
+      label: "Partial Refund",
+      count: acceptance.acceptedPartialRefundCount ?? 0,
+    },
+    {
+      key: "MANUAL_REVIEW",
+      label: "Manual Review",
+      count: acceptance.manualReviewCount ?? 0,
+    },
+    {
+      key: "LEGAL_REVIEW_REQUIRED",
+      label: "Legal Review Required",
+      count: acceptance.legalReviewRequiredCount ?? 0,
+    },
+  ];
+
+  const sourceBreakdown = [
+    {
+      key: "CUSTOMER_SELECTED",
+      label: "Customer selected",
+      count: acceptance.acceptanceBySource?.CUSTOMER_SELECTED ?? 0,
+    },
+    {
+      key: "RULE_ENGINE",
+      label: "Rule engine",
+      count: acceptance.acceptanceBySource?.RULE_ENGINE ?? 0,
+    },
+    {
+      key: "FOLLOW_UP_ENGINE",
+      label: "Follow-up engine",
+      count: acceptance.acceptanceBySource?.FOLLOW_UP_ENGINE ?? 0,
+    },
+    {
+      key: "MERCHANT_MANUAL",
+      label: "Merchant manual",
+      count: acceptance.acceptanceBySource?.MERCHANT_MANUAL ?? 0,
+    },
+    {
+      key: "SYSTEM_DEFAULT",
+      label: "System default",
+      count: acceptance.acceptanceBySource?.SYSTEM_DEFAULT ?? 0,
+    },
+  ];
+
+  const acceptanceTotal = acceptance.totalAcceptedOffers ?? 0;
 
   return (
     <main
@@ -394,6 +475,76 @@ export default function AnalyticsPage() {
                 }
               />
             </div>
+
+            {/* Offer acceptance metrics (current-state per return item) */}
+            {acceptanceTotal > 0 && (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+                  <StatCard
+                    label="Accepted Offers"
+                    value={acceptanceTotal}
+                    accent="text-indigo-700"
+                  />
+                  <StatCard
+                    label="Est. Recovered"
+                    value={
+                      acceptance.estimatedRecoveredAmountDisplay ?? "$0.00"
+                    }
+                    accent="text-emerald-700"
+                  />
+                  <StatCard
+                    label="Manual Review"
+                    value={acceptance.manualReviewCount ?? 0}
+                    accent="text-amber-700"
+                  />
+                  <StatCard
+                    label="Legal Review"
+                    value={acceptance.legalReviewRequiredCount ?? 0}
+                    accent="text-red-700"
+                  />
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6 mb-6">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h2 className="text-sm font-bold text-slate-900 mb-1">
+                      Accepted Offer Breakdown
+                    </h2>
+                    <p className="text-xs text-slate-400 mb-5">
+                      Current accepted outcome per return item
+                    </p>
+                    <div className="space-y-4">
+                      {offerTypeBreakdown.map((row) => (
+                        <BreakdownRow
+                          key={row.key}
+                          label={row.label}
+                          count={row.count}
+                          total={acceptanceTotal}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h2 className="text-sm font-bold text-slate-900 mb-1">
+                      Acceptance by Source
+                    </h2>
+                    <p className="text-xs text-slate-400 mb-5">
+                      How accepted offers were determined
+                    </p>
+                    <div className="space-y-4">
+                      {sourceBreakdown.map((row) => (
+                        <BreakdownRow
+                          key={row.key}
+                          label={row.label}
+                          count={row.count}
+                          total={acceptanceTotal}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Breakdowns */}
             <div className="grid md:grid-cols-2 gap-6">

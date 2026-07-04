@@ -42,6 +42,7 @@ model Merchant {
   shopifyProducts      ShopifyProduct[]
   settings             MerchantSettings?
   recoveryRules        MerchantRecoveryRule[]
+  offerAcceptances     ReturnOfferAcceptance[]
 
   @@index([shopDomain])
   @@index([planTier])
@@ -179,6 +180,7 @@ model ReturnRequest {
   windowExpiresAt   DateTime?
   events            ReturnEvent[]
   items             ReturnItem[]
+  offerAcceptances  ReturnOfferAcceptance[]
   merchant          Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   order             CustomerOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
@@ -213,11 +215,42 @@ model ReturnItem {
   riskLevel        RiskLevel?
   orderItem        OrderItem        @relation(fields: [orderItemId], references: [id])
   returnRequest    ReturnRequest    @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  offerAcceptance  ReturnOfferAcceptance?
 
   @@index([returnRequestId])
   @@index([orderItemId])
   @@index([riskLevel])
   @@index([merchantDecision])
+}
+
+model ReturnOfferAcceptance {
+  id                      String        @id @default(cuid())
+  merchantId              String
+  returnRequestId         String
+  returnItemId            String        @unique
+  originalRequestedOption String?
+  acceptedOfferType       String
+  offerSource             String
+  recoveryAmountCents     Int
+  currency                String        @default("AUD")
+  legalReviewRequired     Boolean       @default(false)
+  acceptedAt              DateTime
+  metadata                Json?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  merchant                Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  returnRequest           ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  returnItem              ReturnItem    @relation(fields: [returnItemId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([returnRequestId])
+  @@index([returnItemId])
+  @@index([acceptedOfferType])
+  @@index([offerSource])
+  @@index([legalReviewRequired])
+  @@index([acceptedAt])
+  @@index([merchantId, acceptedAt])
+  @@index([merchantId, acceptedOfferType])
 }
 
 model ReturnEvent {

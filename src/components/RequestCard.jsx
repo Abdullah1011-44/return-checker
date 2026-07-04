@@ -230,6 +230,12 @@ function normalizeDashboardItem(item) {
     ...(item.reasonIntelligence
       ? { reasonIntelligence: item.reasonIntelligence }
       : {}),
+    ...(item.acceptedOfferLabel
+      ? {
+          acceptedOfferLabel: item.acceptedOfferLabel,
+          estimatedRecoveredAmountDisplay: item.estimatedRecoveredAmountDisplay,
+        }
+      : {}),
   };
 }
 
@@ -419,6 +425,24 @@ export default function RequestCard({
                       </span>{" "}
                       {item.selectedOption || "Not provided"}
                     </p>
+                    {item.acceptedOfferLabel && (
+                      <>
+                        <p>
+                          <span className="font-semibold text-slate-700">
+                            Accepted offer:
+                          </span>{" "}
+                          {item.acceptedOfferLabel}
+                        </p>
+                        {item.estimatedRecoveredAmountDisplay && (
+                          <p>
+                            <span className="font-semibold text-slate-700">
+                              Estimated recovered amount:
+                            </span>{" "}
+                            {item.estimatedRecoveredAmountDisplay}
+                          </p>
+                        )}
+                      </>
+                    )}
                     <p>
                       <span className="font-semibold text-slate-700">
                         AI recommended action:

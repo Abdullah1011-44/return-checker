@@ -1,3 +1,4 @@
+import { mapOfferAcceptanceToDashboardItem } from "@/lib/offerAcceptanceAnalytics";
 import { isDisplayableImageSrc, parseProofImage } from "@/lib/proofImageUrl";
 import { buildReasonIntelligence } from "@/lib/recoveryItemPipeline";
 import {
@@ -59,7 +60,10 @@ function riskUiFromPrisma(riskLevel) {
   return "Medium";
 }
 
-function mapReturnItemToUi(returnItem, { storeType = null } = {}) {
+function mapReturnItemToUi(
+  returnItem,
+  { storeType = null, offerAcceptance = null } = {},
+) {
   const orderItem = returnItem.orderItem;
   const returnReason = REASON_TO_UI[returnItem.reason] ?? "other";
   const reasonKey = reasonKeyFromUiOrPrisma(returnItem.reason);
@@ -113,6 +117,7 @@ function mapReturnItemToUi(returnItem, { storeType = null } = {}) {
     aiSummary: returnItem.aiSummary ?? "",
     recommendedAction,
     reasonIntelligence,
+    ...(mapOfferAcceptanceToDashboardItem(offerAcceptance) ?? {}),
   };
 }
 
@@ -137,9 +142,12 @@ function mapOrderStatusForDashboard(order) {
 }
 
 export function mapReturnRequestToDashboard(returnRequest, options = {}) {
-  const { storeType = null } = options;
+  const { storeType = null, offerAcceptanceByReturnItemId = null } = options;
   const selectedItems = (returnRequest.items ?? []).map((item) =>
-    mapReturnItemToUi(item, { storeType }),
+    mapReturnItemToUi(item, {
+      storeType,
+      offerAcceptance: offerAcceptanceByReturnItemId?.get(item.id) ?? null,
+    }),
   );
   const primaryReason = getPrimaryReasonKey(
     selectedItems.map((item) => ({ returnReason: item.returnReason })),
