@@ -275,7 +275,11 @@ export default function RequestCard({
   onManualReview,
   onNoteChange,
 }) {
-  const initials = request.email.slice(0, 2).toUpperCase();
+  const email = typeof request.email === "string" ? request.email : "";
+  const initials =
+    email.length >= 2
+      ? email.slice(0, 2).toUpperCase()
+      : email.slice(0, 1).toUpperCase() || "?";
 
   const [note, setNote] = useState(request.merchantNote || "");
   const [saved, setSaved] = useState(false);
@@ -340,7 +344,7 @@ export default function RequestCard({
                 Order #{request.orderNumber}
               </p>
               <p className="text-sm font-semibold text-slate-800">
-                {request.email}
+                {email || "Unknown customer"}
               </p>
               <OrderStatusBadges orderStatus={request.orderStatus} />
               <div className="flex flex-wrap gap-2 mt-2">

@@ -72,21 +72,27 @@ function mapReturnItemToUi(returnItem, { storeType = null } = {}) {
     returnItem.bestAction ?? bestActionForReason(reasonKey);
   const selectedOption =
     RECOVERY_TO_UI[returnItem.selectedOption] ?? returnItem.selectedOption;
-  const reasonIntelligence = buildReasonIntelligence({
-    itemContext: {
-      productName: orderItem?.productName,
-      title: orderItem?.productName,
-      productType:
-        orderItem?.productType ?? orderItem?.product?.productType ?? null,
-      product: orderItem?.product,
-      orderItem,
-    },
-    returnReason: returnItem.reason,
-    customerReason: returnReason,
-    comment: returnItem.comment,
-    storeType,
-    recoveryOption: selectedOption,
-  });
+  let reasonIntelligence = null;
+
+  try {
+    reasonIntelligence = buildReasonIntelligence({
+      itemContext: {
+        productName: orderItem?.productName,
+        title: orderItem?.productName,
+        productType:
+          orderItem?.productType ?? orderItem?.product?.productType ?? null,
+        product: orderItem?.product,
+        orderItem,
+      },
+      returnReason: returnItem.reason,
+      customerReason: returnReason,
+      comment: returnItem.comment,
+      storeType,
+      recoveryOption: selectedOption,
+    });
+  } catch {
+    reasonIntelligence = null;
+  }
 
   return {
     id: returnItem.id,
@@ -161,7 +167,7 @@ export function mapReturnRequestToDashboard(returnRequest, options = {}) {
   return {
     id: returnRequest.id,
     orderNumber: returnRequest.order?.orderNumber ?? "",
-    email: returnRequest.customerEmail,
+    email: returnRequest.customerEmail ?? "",
     orderStatus: mapOrderStatusForDashboard(returnRequest.order),
     rawStatus: returnRequest.status,
     status: STATUS_TO_UI[returnRequest.status] ?? returnRequest.status,

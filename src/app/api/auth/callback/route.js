@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { captureException } from "@/lib/sentry";
 import {
   exchangeAuthorizationCode,
+  getShopifyCredentialFingerprint,
   getShopifyEnv,
   SHOPIFY_OAUTH_STATE_COOKIE,
   upsertMerchantFromOAuth,
@@ -130,6 +131,16 @@ export async function GET(request) {
       );
     }
 
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[Shopify OAuth:callback:start]", {
+        shopDomain: shopCheck.shop,
+        hasCode: Boolean(code),
+        hasState: Boolean(state),
+        hasHmac: Boolean(hmac),
+        ...getShopifyCredentialFingerprint(),
+      });
+    }
+
     const cookieStore = await cookies();
     const storedState = cookieStore.get(SHOPIFY_OAUTH_STATE_COOKIE)?.value;
 
@@ -179,6 +190,15 @@ export async function GET(request) {
       accessToken,
       scope,
     );
+
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[Shopify OAuth:callback:merchant-saved]", {
+        shopDomain: shopCheck.shop,
+        merchantId: merchant.id,
+        accessTokenLength: accessToken.length,
+        scopes: scope,
+      });
+    }
 
     await registerWebhooksAfterInstall({
       merchant,

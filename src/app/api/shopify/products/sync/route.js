@@ -13,10 +13,18 @@ import {
   logAuditInfo,
   sanitizeAuditMetadata,
 } from "@/lib/audit";
-import { handleApiError } from "@/lib/errors";
+import { createApiErrorResponse } from "@/lib/errors";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { captureException } from "@/lib/sentry";
-import { queueShopifySyncForMerchant } from "@/lib/shopifySyncQueue";
+import {
+  buildShopifySyncErrorDetails,
+  buildShopifySyncErrorMessage,
+  buildShopifySyncSafeLogMeta,
+  isProtectedCustomerDataError,
+  logShopifySyncError,
+  resolveSyncFailureAudit,
+} from "@/lib/shopifySyncErrors";
+import { runShopifySyncForMerchant } from "@/lib/shopifySyncRunner";
 import { getMerchantSyncAuditContext } from "@/lib/syncShopifyOrders";
 
 function buildProductSyncAuditMeta(syncContext, extra = {}) {
@@ -28,10 +36,115 @@ function buildProductSyncAuditMeta(syncContext, extra = {}) {
   });
 }
 
+async function handleShopifyProductSyncRouteError(error, meta = {}) {
+  const { syncContext, request } = meta;
+  const requestContext = request
+    ? getAuditRequestContext(request)
+    : { ipAddress: null, userAgent: null };
+
+  if (isProtectedCustomerDataError(error)) {
+    logShopifySyncError("shopify-product-sync", error, syncContext);
+
+    logAuditInfo(
+      AUDIT_EVENTS.SHOPIFY_PRODUCTS_SYNC_FAILED,
+      buildProductSyncAuditMeta(syncContext, {
+        actorType: AUDIT_ACTORS.MERCHANT,
+        code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
+      }),
+    );
+
+    await safeCreateAdminAuditLog({
+      merchantId: syncContext?.merchantId ?? null,
+      eventType: ADMIN_AUDIT_EVENTS.SHOPIFY_PRODUCTS_SYNC_FAILED,
+      actorType: ADMIN_AUDIT_ACTORS.MERCHANT,
+      severity: ADMIN_AUDIT_SEVERITY.ERROR,
+      resourceType: "SHOPIFY_PRODUCT_SYNC",
+      message: "Shopify product sync failed",
+      metadata: {
+        shopDomain: syncContext?.shopDomain ?? null,
+        code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
+        hasToken: syncContext?.hasToken ?? false,
+      },
+      ...requestContext,
+    });
+
+    return createApiErrorResponse(
+      "Shopify connection works, but product sync requires protected customer data access approval in Shopify Partner Dashboard.",
+      403,
+      "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
+    );
+  }
+
+  const { code, httpStatus } = resolveSyncFailureAudit(error);
+  const safeLogMeta = buildShopifySyncSafeLogMeta(error, syncContext);
+
+  logShopifySyncError("shopify-product-sync", { ...error, code }, syncContext);
+
+  logAuditInfo(
+    AUDIT_EVENTS.SHOPIFY_PRODUCTS_SYNC_FAILED,
+    buildProductSyncAuditMeta(syncContext, {
+      actorType: AUDIT_ACTORS.MERCHANT,
+      code,
+      httpStatus,
+      endpoint: safeLogMeta.endpoint,
+      apiType: safeLogMeta.apiType,
+      apiVersion: safeLogMeta.apiVersion,
+      errorSummary: safeLogMeta.errorSummary,
+    }),
+  );
+
+  await safeCreateAdminAuditLog({
+    merchantId: syncContext?.merchantId ?? null,
+    eventType: ADMIN_AUDIT_EVENTS.SHOPIFY_PRODUCTS_SYNC_FAILED,
+    actorType: ADMIN_AUDIT_ACTORS.MERCHANT,
+    severity: ADMIN_AUDIT_SEVERITY.ERROR,
+    resourceType: "SHOPIFY_PRODUCT_SYNC",
+    message: "Shopify product sync failed",
+    metadata: {
+      shopDomain: syncContext?.shopDomain ?? null,
+      code,
+      httpStatus,
+      endpoint: safeLogMeta.endpoint,
+      apiType: safeLogMeta.apiType,
+      apiVersion: safeLogMeta.apiVersion,
+      errorSummary: safeLogMeta.errorSummary,
+      hasToken: syncContext?.hasToken ?? false,
+    },
+    ...requestContext,
+  });
+
+  const knownCodes = new Set([
+    "SHOPIFY_TOKEN_INVALID",
+    "SHOPIFY_ORDER_ACCESS_DENIED",
+    "SHOPIFY_ENDPOINT_NOT_FOUND",
+    "SHOPIFY_RATE_LIMITED",
+    "SHOPIFY_NETWORK_ERROR",
+    "SHOPIFY_UNAVAILABLE",
+    "SHOPIFY_API_ERROR",
+    "INNGEST_QUEUE_UNAVAILABLE",
+    "INNGEST_QUEUE_ERROR",
+  ]);
+
+  if (knownCodes.has(code)) {
+    return createApiErrorResponse(
+      buildShopifySyncErrorMessage({ ...error, code }),
+      httpStatus,
+      code,
+      buildShopifySyncErrorDetails({ ...error, code }, syncContext),
+    );
+  }
+
+  return createApiErrorResponse(
+    buildShopifySyncErrorMessage(error),
+    httpStatus,
+    code,
+  );
+}
+
 /**
  * POST /api/shopify/products/sync
  *
- * Queue Shopify sync for the authenticated merchant only.
+ * Sync Shopify products for the authenticated merchant only.
  * Request body is ignored — merchantId is never taken from the client.
  */
 export async function POST(request) {
@@ -47,19 +160,17 @@ export async function POST(request) {
         method: "POST",
       });
 
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 },
-      );
+      return createApiErrorResponse("Unauthorized", 401, "UNAUTHORIZED");
     }
 
     merchant = auth.merchant;
     syncContext = await getMerchantSyncAuditContext(merchant.id);
 
     if (!syncContext.hasToken || !syncContext.shopDomain) {
-      return NextResponse.json(
-        { success: false, error: "Missing Shopify connection" },
-        { status: 400 },
+      return createApiErrorResponse(
+        "Missing Shopify connection",
+        400,
+        "MISSING_SHOPIFY_CONNECTION",
       );
     }
 
@@ -78,7 +189,7 @@ export async function POST(request) {
       actorType: ADMIN_AUDIT_ACTORS.MERCHANT,
       severity: ADMIN_AUDIT_SEVERITY.INFO,
       resourceType: "SHOPIFY_PRODUCT_SYNC",
-      message: "Shopify product sync queued",
+      message: "Shopify product sync started",
       metadata: {
         shopDomain: syncContext.shopDomain,
         hasToken: syncContext.hasToken,
@@ -86,7 +197,7 @@ export async function POST(request) {
       ...requestContext,
     });
 
-    const queueResult = await queueShopifySyncForMerchant({
+    const syncSummary = await runShopifySyncForMerchant({
       merchantId: merchant.id,
       reason: "manual:dashboard-products",
     });
@@ -95,8 +206,8 @@ export async function POST(request) {
       AUDIT_EVENTS.SHOPIFY_PRODUCTS_SYNC_COMPLETED,
       buildProductSyncAuditMeta(syncContext, {
         actorType: AUDIT_ACTORS.MERCHANT,
-        queued: true,
-        requestedAt: queueResult.requestedAt,
+        synced: true,
+        productsSynced: syncSummary.productsSynced,
       }),
     );
 
@@ -106,50 +217,27 @@ export async function POST(request) {
       actorType: ADMIN_AUDIT_ACTORS.MERCHANT,
       severity: ADMIN_AUDIT_SEVERITY.INFO,
       resourceType: "SHOPIFY_PRODUCT_SYNC",
-      message: "Shopify product sync queued",
+      message: "Shopify product sync completed",
       metadata: {
         shopDomain: syncContext.shopDomain,
-        queued: true,
-        requestedAt: queueResult.requestedAt,
+        synced: true,
+        productsSynced: syncSummary.productsSynced,
       },
       ...requestContext,
     });
 
     return NextResponse.json({
       success: true,
-      queued: true,
-      message: "Shopify sync queued",
-      requestedAt: queueResult.requestedAt,
+      synced: true,
+      message: "Shopify products synced successfully",
+      productsSynced: syncSummary.products?.productsSynced ?? 0,
+      variantsSynced: syncSummary.products?.variantsSynced ?? 0,
+      warnings: [],
     });
   } catch (error) {
     if (!syncContext && merchant?.id) {
       syncContext = await getMerchantSyncAuditContext(merchant.id);
     }
-
-    const requestContext = getAuditRequestContext(request);
-
-    logAuditInfo(
-      AUDIT_EVENTS.SHOPIFY_PRODUCTS_SYNC_FAILED,
-      buildProductSyncAuditMeta(syncContext, {
-        actorType: AUDIT_ACTORS.MERCHANT,
-        code: error?.code ?? "SHOPIFY_PRODUCTS_SYNC_ERROR",
-      }),
-    );
-
-    await safeCreateAdminAuditLog({
-      merchantId: syncContext?.merchantId ?? null,
-      eventType: ADMIN_AUDIT_EVENTS.SHOPIFY_PRODUCTS_SYNC_FAILED,
-      actorType: ADMIN_AUDIT_ACTORS.MERCHANT,
-      severity: ADMIN_AUDIT_SEVERITY.ERROR,
-      resourceType: "SHOPIFY_PRODUCT_SYNC",
-      message: "Shopify product sync queue failed",
-      metadata: {
-        shopDomain: syncContext?.shopDomain ?? null,
-        code: error?.code ?? "SHOPIFY_PRODUCTS_SYNC_ERROR",
-        httpStatus: error?.status ?? null,
-      },
-      ...requestContext,
-    });
 
     captureException(error, {
       route: request?.url,
@@ -159,11 +247,6 @@ export async function POST(request) {
       action: "shopify_products_sync",
     });
 
-    return handleApiError(error, {
-      context: "shopify-products-sync",
-      fallbackMessage:
-        "Unable to queue Shopify product sync. Please try again.",
-      fallbackCode: "SHOPIFY_PRODUCTS_SYNC_ERROR",
-    });
+    return handleShopifyProductSyncRouteError(error, { syncContext, request });
   }
 }

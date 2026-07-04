@@ -6,6 +6,7 @@ import {
   buildAuthorizeUrl,
   generateOAuthState,
   getOAuthRedirectUri,
+  getShopifyCredentialFingerprint,
   getShopifyEnv,
   oauthStateCookieOptions,
   SHOPIFY_OAUTH_STATE_COOKIE,
@@ -51,6 +52,15 @@ export async function GET(request) {
       scopes,
       redirectUri,
     });
+
+    if (isDevelopment()) {
+      console.debug("[Shopify OAuth:install]", {
+        shopDomain: shopCheck.shop,
+        scopes,
+        redirectUri,
+        ...getShopifyCredentialFingerprint(),
+      });
+    }
 
     return NextResponse.redirect(authorizeUrl);
   } catch (error) {

@@ -25,6 +25,11 @@ export class ShopifySyncRunnerError extends Error {
     this.merchantId = options.merchantId ?? null;
     this.shopDomain = options.shopDomain ?? null;
     this.retryable = options.retryable ?? !NON_RETRYABLE_CODES.has(this.code);
+    this.status = options.status ?? null;
+    this.endpoint = options.endpoint ?? null;
+    this.apiType = options.apiType ?? null;
+    this.apiVersion = options.apiVersion ?? null;
+    this.errorSummary = options.errorSummary ?? null;
   }
 }
 
@@ -51,8 +56,13 @@ function sanitizeRunnerError(error, context = {}) {
   return new ShopifySyncRunnerError(safeErrorMessage(error), {
     code,
     merchantId: context.merchantId ?? null,
-    shopDomain: context.shopDomain ?? null,
+    shopDomain: context.shopDomain ?? error?.shopDomain ?? null,
     retryable: !NON_RETRYABLE_CODES.has(code),
+    status: error?.status ?? null,
+    endpoint: error?.endpoint ?? null,
+    apiType: error?.apiType ?? null,
+    apiVersion: error?.apiVersion ?? null,
+    errorSummary: error?.errorSummary ?? null,
   });
 }
 

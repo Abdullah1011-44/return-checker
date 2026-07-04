@@ -22,7 +22,45 @@ export function getShopifyEnv() {
 
 /** OAuth redirect_uri registered in Shopify Partner Dashboard */
 export function getOAuthRedirectUri(appUrl) {
-  return `${appUrl}/api/auth/callback`;
+  return `${appUrl.replace(/\/$/, "")}/api/auth/callback`;
+}
+
+/**
+ * Build the merchant-facing reinstall URL for a shop domain.
+ * @param {string} shopDomain
+ */
+export function buildShopifyInstallUrl(shopDomain) {
+  const shopCheck = validateShopDomain(shopDomain);
+  if (!shopCheck.valid) {
+    return null;
+  }
+
+  const { appUrl } = getShopifyEnv();
+  const params = new URLSearchParams({ shop: shopCheck.shop });
+  return `${appUrl.replace(/\/$/, "")}/api/auth/install?${params.toString()}`;
+}
+
+/**
+ * Safe credential fingerprint for development logs (never log full secrets).
+ */
+export function getShopifyCredentialFingerprint() {
+  const { apiKey, appUrl } = getShopifyEnv();
+  const apiKeySuffix =
+    typeof apiKey === "string" && apiKey.length >= 4
+      ? apiKey.slice(-4)
+      : "unknown";
+
+  return {
+    apiKeySuffix,
+    appUrl,
+    redirectUri: getOAuthRedirectUri(appUrl),
+  };
+}
+
+function logShopifyOAuthDev(phase, payload) {
+  if (isDevelopment()) {
+    console.debug(`[Shopify OAuth:${phase}]`, payload);
+  }
 }
 
 /**
@@ -172,7 +210,15 @@ export async function verifyShopifyOAuthCallback(query) {
  * Token is stored server-side only — never sent to the browser.
  */
 export async function exchangeAuthorizationCode(shop, code) {
-  const { apiKey, apiSecret } = getShopifyEnv();
+  const { apiKey, apiSecret, appUrl } = getShopifyEnv();
+  const redirectUri = getOAuthRedirectUri(appUrl);
+
+  logShopifyOAuthDev("token-exchange:start", {
+    shopDomain: shop,
+    hasCode: Boolean(code),
+    redirectUri,
+    ...getShopifyCredentialFingerprint(),
+  });
 
   const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
     method: "POST",
@@ -181,6 +227,7 @@ export async function exchangeAuthorizationCode(shop, code) {
       client_id: apiKey,
       client_secret: apiSecret,
       code,
+      redirect_uri: redirectUri,
     }),
   });
 
@@ -191,16 +238,37 @@ export async function exchangeAuthorizationCode(shop, code) {
       data.error_description ||
       data.error ||
       "Failed to exchange authorization code for access token.";
+
+    logShopifyOAuthDev("token-exchange:failed", {
+      shopDomain: shop,
+      httpStatus: response.status,
+      errorSummary: message,
+    });
+
     throw new Error(message);
   }
 
   if (!data.access_token) {
+    logShopifyOAuthDev("token-exchange:failed", {
+      shopDomain: shop,
+      httpStatus: response.status,
+      errorSummary: "Missing access_token in Shopify response",
+    });
     throw new Error("Shopify did not return an access token.");
   }
 
+  const accessToken = String(data.access_token).trim();
+  const scope = data.scope ?? null;
+
+  logShopifyOAuthDev("token-exchange:succeeded", {
+    shopDomain: shop,
+    accessTokenLength: accessToken.length,
+    scopes: scope,
+  });
+
   return {
-    accessToken: data.access_token,
-    scope: data.scope ?? null,
+    accessToken,
+    scope,
   };
 }
 
@@ -217,7 +285,8 @@ export function oauthStateCookieOptions() {
 
 /**
  * Persist installed shop after successful OAuth.
- * Uses shopDomain as the unique key for upsert.
+ * Finds merchants by shopDomain case-insensitively so reinstall always
+ * overwrites stale tokens on the same shop.
  */
 export async function upsertMerchantFromOAuth(
   prisma,
@@ -225,30 +294,73 @@ export async function upsertMerchantFromOAuth(
   accessToken,
   returnedScopes,
 ) {
-  // Temporary placeholders until merchant profile sync from Shopify Admin API
-  const shopName = shop.replace(SHOP_DOMAIN_SUFFIX, "") || shop;
-  const installEmail = `auth+${shop}@shopify.install`;
+  const normalizedShop = shop.trim().toLowerCase();
+  const normalizedToken = String(accessToken).trim();
+
+  if (!normalizedToken) {
+    throw new Error("Shopify access token is empty after OAuth.");
+  }
+
+  const shopName =
+    normalizedShop.replace(SHOP_DOMAIN_SUFFIX, "") || normalizedShop;
+  const installEmail = `auth+${normalizedShop}@shopify.install`;
 
   const scopeValue =
     returnedScopes ?? optionalEnv("SHOPIFY_SCOPES", "read_orders");
 
-  return prisma.merchant.upsert({
-    where: { shopDomain: shop },
-    update: {
-      shopifyAccessToken: accessToken,
-      shopifyInstalledAt: new Date(),
-      shopifyUninstalledAt: null,
-      isActive: true,
-      ...(scopeValue ? { shopifyScope: scopeValue } : {}),
+  const existing = await prisma.merchant.findFirst({
+    where: {
+      shopDomain: {
+        equals: normalizedShop,
+        mode: "insensitive",
+      },
     },
-    create: {
-      shopDomain: shop,
-      shopifyAccessToken: accessToken,
-      shopifyScope: scopeValue,
-      shopifyInstalledAt: new Date(),
-      isActive: true,
-      shopName,
-      email: installEmail,
+    select: {
+      id: true,
+      shopDomain: true,
+      shopifyAccessToken: true,
     },
   });
+
+  const merchantData = {
+    shopDomain: normalizedShop,
+    shopifyAccessToken: normalizedToken,
+    shopifyInstalledAt: new Date(),
+    shopifyUninstalledAt: null,
+    isActive: true,
+    ...(scopeValue ? { shopifyScope: scopeValue } : {}),
+  };
+
+  let merchant;
+  let operation = "created";
+
+  if (existing) {
+    operation = "updated";
+    merchant = await prisma.merchant.update({
+      where: { id: existing.id },
+      data: merchantData,
+    });
+  } else {
+    merchant = await prisma.merchant.create({
+      data: {
+        ...merchantData,
+        shopName,
+        email: installEmail,
+      },
+    });
+  }
+
+  logShopifyOAuthDev("merchant-upsert:succeeded", {
+    shopDomain: normalizedShop,
+    merchantId: merchant.id,
+    operation,
+    accessTokenLength: normalizedToken.length,
+    previousTokenLength: existing?.shopifyAccessToken?.length ?? 0,
+    tokenReplaced:
+      !existing?.shopifyAccessToken ||
+      existing.shopifyAccessToken !== normalizedToken,
+    scopes: scopeValue,
+  });
+
+  return merchant;
 }

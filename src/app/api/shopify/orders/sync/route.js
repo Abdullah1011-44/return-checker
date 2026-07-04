@@ -13,60 +13,20 @@ import {
   logAuditInfo,
   sanitizeAuditMetadata,
 } from "@/lib/audit";
-import {
-  AppError,
-  createApiErrorResponse,
-  handleApiError,
-  logSafeError,
-} from "@/lib/errors";
+import { createApiErrorResponse, handleApiError } from "@/lib/errors";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { captureException } from "@/lib/sentry";
-import { queueShopifySyncForMerchant } from "@/lib/shopifySyncQueue";
+import {
+  buildShopifySyncErrorDetails,
+  buildShopifySyncErrorMessage,
+  buildShopifySyncSafeLogMeta,
+  isProtectedCustomerDataError,
+  logShopifySyncError,
+  resolveSyncFailureAudit,
+} from "@/lib/shopifySyncErrors";
+import { runShopifySyncForMerchant } from "@/lib/shopifySyncRunner";
 import { getMerchantSyncAuditContext } from "@/lib/syncShopifyOrders";
-
-function isProtectedCustomerDataError(error) {
-  return (
-    error?.code === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED" ||
-    error?.message === "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED"
-  );
-}
-
-function isShopifyNetworkError(error) {
-  if (error?.code === "SHOPIFY_NETWORK_ERROR") {
-    return true;
-  }
-
-  const cause = error?.cause;
-  if (cause && typeof cause === "object" && "code" in cause) {
-    const networkCodes = [
-      "ECONNREFUSED",
-      "ENOTFOUND",
-      "ETIMEDOUT",
-      "ECONNRESET",
-      "UND_ERR_CONNECT_TIMEOUT",
-    ];
-    if (networkCodes.includes(cause.code)) {
-      return true;
-    }
-  }
-
-  return error instanceof TypeError && /fetch failed/i.test(error.message);
-}
-
-function logShopifySyncError(context, error, syncContext, meta = {}) {
-  console.error("[Shopify Sync]", {
-    context,
-    merchantId: syncContext?.merchantId ?? null,
-    shopDomain: syncContext?.shopDomain ?? null,
-    endpoint: error?.endpoint ?? meta.endpoint ?? null,
-    httpStatus: error?.status ?? null,
-    code: error?.code ?? null,
-    hasToken: syncContext?.hasToken ?? false,
-  });
-
-  logSafeError(context, error);
-}
 
 function buildSyncAuditMeta(syncContext, extra = {}) {
   return sanitizeAuditMetadata({
@@ -77,62 +37,14 @@ function buildSyncAuditMeta(syncContext, extra = {}) {
   });
 }
 
-function resolveSyncFailureAudit(error) {
-  if (isProtectedCustomerDataError(error)) {
-    return {
-      code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
-      httpStatus: 403,
-    };
-  }
-
-  if (error instanceof AppError) {
-    return { code: error.code, httpStatus: error.status };
-  }
-
-  const httpStatus = error?.status;
-
-  if (httpStatus === 401 || httpStatus === 403) {
-    return { code: "SHOPIFY_PERMISSION_REQUIRED", httpStatus };
-  }
-
-  if (httpStatus === 429) {
-    return { code: "SHOPIFY_RATE_LIMIT", httpStatus: 429 };
-  }
-
-  if (httpStatus === 500 || httpStatus === 502 || httpStatus === 503) {
-    return { code: "SHOPIFY_UNAVAILABLE", httpStatus: 502 };
-  }
-
-  if (isShopifyNetworkError(error)) {
-    return { code: "SHOPIFY_CONNECTION_ERROR", httpStatus: 503 };
-  }
-
-  return {
-    code: error?.code ?? "SHOPIFY_SYNC_ERROR",
-    httpStatus: httpStatus ?? 500,
-  };
-}
-
 async function handleShopifySyncRouteError(error, meta = {}) {
-  console.log("=== SHOPIFY SYNC FULL ERROR ===");
-  console.dir(error, { depth: null });
-  console.log("==============================");
-
   const { syncContext, request } = meta;
   const requestContext = request
     ? getAuditRequestContext(request)
     : { ipAddress: null, userAgent: null };
 
   if (isProtectedCustomerDataError(error)) {
-    console.error("[Shopify Sync]", {
-      context: "shopify-order-sync",
-      merchantId: syncContext?.merchantId ?? null,
-      shopDomain: syncContext?.shopDomain ?? null,
-      endpoint: error?.endpoint ?? null,
-      httpStatus: 403,
-      code: "SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED",
-      hasToken: syncContext?.hasToken ?? false,
-    });
+    logShopifySyncError("shopify-order-sync", error, syncContext);
 
     logAuditInfo(
       AUDIT_EVENTS.SHOPIFY_PROTECTED_CUSTOMER_DATA_REQUIRED,
@@ -173,8 +85,9 @@ async function handleShopifySyncRouteError(error, meta = {}) {
   }
 
   const { code, httpStatus } = resolveSyncFailureAudit(error);
+  const safeLogMeta = buildShopifySyncSafeLogMeta(error, syncContext);
 
-  logShopifySyncError("shopify-order-sync", error, syncContext, meta);
+  logShopifySyncError("shopify-order-sync", { ...error, code }, syncContext);
 
   logAuditInfo(
     AUDIT_EVENTS.SHOPIFY_SYNC_FAILED,
@@ -182,6 +95,10 @@ async function handleShopifySyncRouteError(error, meta = {}) {
       actorType: AUDIT_ACTORS.SYSTEM,
       code,
       httpStatus,
+      endpoint: safeLogMeta.endpoint,
+      apiType: safeLogMeta.apiType,
+      apiVersion: safeLogMeta.apiVersion,
+      errorSummary: safeLogMeta.errorSummary,
     }),
   );
 
@@ -196,43 +113,33 @@ async function handleShopifySyncRouteError(error, meta = {}) {
       shopDomain: syncContext?.shopDomain ?? null,
       code,
       httpStatus,
+      endpoint: safeLogMeta.endpoint,
+      apiType: safeLogMeta.apiType,
+      apiVersion: safeLogMeta.apiVersion,
+      errorSummary: safeLogMeta.errorSummary,
+      hasToken: syncContext?.hasToken ?? false,
     },
     ...requestContext,
   });
 
-  if (error instanceof AppError) {
-    return createApiErrorResponse(error.message, error.status, error.code);
-  }
+  const knownCodes = new Set([
+    "SHOPIFY_TOKEN_INVALID",
+    "SHOPIFY_ORDER_ACCESS_DENIED",
+    "SHOPIFY_ENDPOINT_NOT_FOUND",
+    "SHOPIFY_RATE_LIMITED",
+    "SHOPIFY_NETWORK_ERROR",
+    "SHOPIFY_UNAVAILABLE",
+    "SHOPIFY_API_ERROR",
+    "INNGEST_QUEUE_UNAVAILABLE",
+    "INNGEST_QUEUE_ERROR",
+  ]);
 
-  if (httpStatus === 401 || httpStatus === 403) {
+  if (knownCodes.has(code)) {
     return createApiErrorResponse(
-      "Shopify permission required",
+      buildShopifySyncErrorMessage({ ...error, code }),
       httpStatus,
-      "SHOPIFY_PERMISSION_REQUIRED",
-    );
-  }
-
-  if (httpStatus === 429) {
-    return createApiErrorResponse(
-      "Shopify rate limit reached. Please try again later.",
-      429,
-      "SHOPIFY_RATE_LIMIT",
-    );
-  }
-
-  if (code === "SHOPIFY_UNAVAILABLE") {
-    return createApiErrorResponse(
-      "Shopify is temporarily unavailable. Please try again later.",
-      502,
-      "SHOPIFY_UNAVAILABLE",
-    );
-  }
-
-  if (code === "SHOPIFY_CONNECTION_ERROR") {
-    return createApiErrorResponse(
-      "Unable to connect to Shopify. Please try again.",
-      503,
-      "SHOPIFY_CONNECTION_ERROR",
+      code,
+      buildShopifySyncErrorDetails({ ...error, code }, syncContext),
     );
   }
 
@@ -301,7 +208,7 @@ export async function POST(request) {
       actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
       severity: ADMIN_AUDIT_SEVERITY.INFO,
       resourceType: "SHOPIFY_SYNC",
-      message: "Shopify order sync queued",
+      message: "Shopify order sync started",
       metadata: {
         shopDomain: syncContext.shopDomain,
         hasToken: syncContext.hasToken,
@@ -317,7 +224,7 @@ export async function POST(request) {
       );
     }
 
-    const queueResult = await queueShopifySyncForMerchant({
+    const syncSummary = await runShopifySyncForMerchant({
       merchantId: merchant.id,
       reason: "manual:dashboard-orders",
     });
@@ -326,8 +233,9 @@ export async function POST(request) {
       AUDIT_EVENTS.SHOPIFY_SYNC_COMPLETED,
       buildSyncAuditMeta(syncContext, {
         actorType: AUDIT_ACTORS.SYSTEM,
-        queued: true,
-        requestedAt: queueResult.requestedAt,
+        synced: true,
+        ordersSynced: syncSummary.ordersSynced,
+        productsSynced: syncSummary.productsSynced,
       }),
     );
 
@@ -337,20 +245,25 @@ export async function POST(request) {
       actorType: ADMIN_AUDIT_ACTORS.SYSTEM,
       severity: ADMIN_AUDIT_SEVERITY.INFO,
       resourceType: "SHOPIFY_SYNC",
-      message: "Shopify order sync queued",
+      message: "Shopify order sync completed",
       metadata: {
         shopDomain: syncContext.shopDomain,
-        queued: true,
-        requestedAt: queueResult.requestedAt,
+        synced: true,
+        ordersSynced: syncSummary.ordersSynced,
+        productsSynced: syncSummary.productsSynced,
       },
       ...requestContext,
     });
 
     return NextResponse.json({
       success: true,
-      queued: true,
-      message: "Shopify sync queued",
-      requestedAt: queueResult.requestedAt,
+      synced: true,
+      message: "Shopify orders synced successfully",
+      orders: syncSummary.orders,
+      items: {
+        totalSynced: syncSummary.orders?.itemsSynced ?? 0,
+      },
+      ordersSynced: syncSummary.ordersSynced,
     });
   } catch (error) {
     if (!syncContext && merchant?.id) {

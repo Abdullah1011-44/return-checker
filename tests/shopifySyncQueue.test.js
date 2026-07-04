@@ -10,6 +10,7 @@ vi.mock("@/lib/inngest", () => ({
 
 import {
   buildShopifySyncEventData,
+  classifyInngestQueueError,
   queueShopifySyncForMerchant,
   SHOPIFY_SYNC_REQUESTED_EVENT,
 } from "@/lib/shopifySyncQueue";
@@ -52,6 +53,38 @@ describe("shopifySyncQueue", () => {
       queued: true,
       merchantId: "merchant-1",
       reason: "manual:dashboard-orders",
+    });
+  });
+
+  it("classifies localhost:8288 Inngest dev server failures separately", () => {
+    const error = classifyInngestQueueError(
+      Object.assign(new TypeError("fetch failed"), {
+        cause: { code: "ECONNREFUSED", port: 8288 },
+      }),
+    );
+
+    expect(error).toMatchObject({
+      code: "INNGEST_QUEUE_UNAVAILABLE",
+      status: 503,
+    });
+    expect(error.message).toContain("8288");
+  });
+
+  it("throws INNGEST_QUEUE_UNAVAILABLE when Inngest send fails locally", async () => {
+    mockInngestSend.mockRejectedValue(
+      Object.assign(new TypeError("fetch failed"), {
+        cause: { code: "ECONNREFUSED", port: 8288 },
+      }),
+    );
+
+    await expect(
+      queueShopifySyncForMerchant({
+        merchantId: "merchant-1",
+        reason: "scheduler:cron",
+      }),
+    ).rejects.toMatchObject({
+      code: "INNGEST_QUEUE_UNAVAILABLE",
+      status: 503,
     });
   });
 });

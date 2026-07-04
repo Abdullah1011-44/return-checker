@@ -1,7 +1,20 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RequestCard from "@/components/RequestCard";
-import { fetchMerchantJson, getApiErrorMessage } from "@/lib/dashboardFetch";
+import {
+  fetchMerchantJson,
+  processDashboardRequestsLoadResult,
+  shouldShowDashboardLoadingSpinner,
+} from "@/lib/dashboardFetch";
+
+const IS_DEV = process.env.NODE_ENV === "development";
+const LOAD_TIMEOUT_MS = 10_000;
+
+function debugDashboard(phase, payload) {
+  if (IS_DEV) {
+    console.debug(`[dashboard:${phase}]`, payload);
+  }
+}
 
 const STATUS_FILTERS = [
   { id: "ALL", label: "All", statuses: null },
@@ -165,13 +178,22 @@ export default function Dashboard() {
   const [syncMessage, setSyncMessage] = useState("");
   const [syncError, setSyncError] = useState("");
   const [syncHelper, setSyncHelper] = useState("");
+  const [syncReconnectPath, setSyncReconnectPath] = useState("");
   const [syncSummary, setSyncSummary] = useState(null);
   const [productSyncing, setProductSyncing] = useState(false);
   const [productSyncMessage, setProductSyncMessage] = useState("");
   const [productSyncError, setProductSyncError] = useState("");
+  const [productSyncReconnectPath, setProductSyncReconnectPath] = useState("");
   const [productSyncWarnings, setProductSyncWarnings] = useState([]);
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+  const loadGenerationRef = useRef(0);
+  const mountedRef = useRef(false);
 
   const safeRequests = Array.isArray(requests) ? requests : [];
+  const showLoadingSpinner = shouldShowDashboardLoadingSpinner(
+    loading,
+    safeRequests.length,
+  );
 
   const pendingCount = countForFilter(safeRequests, STATUS_FILTERS[1]);
   const attentionCount = countForFilter(safeRequests, STATUS_FILTERS[2]);
@@ -189,44 +211,178 @@ export default function Dashboard() {
     [filteredRequests, sortOption],
   );
 
-  const loadRequests = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
+  const loadRequests = useCallback(
+    async ({ background = false, signal, loadId } = {}) => {
+      const activeLoadId = background
+        ? (loadId ?? loadGenerationRef.current)
+        : (loadId ?? ++loadGenerationRef.current);
 
-    try {
-      const { res, data, aborted } = await fetchMerchantJson("/api/requests");
-
-      if (aborted) {
-        setLoadError("Could not load return requests.");
-        setRequests([]);
-        return;
-      }
-
-      if (!res?.ok || data?.success !== true) {
-        setLoadError(
-          getApiErrorMessage(res, data, "Could not load return requests."),
-        );
-        setRequests([]);
-        return;
-      }
-
-      const nextRequests = Array.isArray(data.requests) ? data.requests : [];
-      setRequests(nextRequests);
-      setLoadError("");
-    } catch (error) {
-      console.error("[dashboard] Failed to load return requests.", {
-        name: error instanceof Error ? error.name : "Error",
+      debugDashboard("loadRequests:start", {
+        background,
+        loadId: activeLoadId,
+        signalAborted: signal?.aborted ?? false,
       });
-      setLoadError("Could not load return requests.");
-      setRequests([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+
+      if (!background) {
+        setLoading(true);
+        setLoadTimedOut(false);
+      }
+      setLoadError("");
+
+      try {
+        debugDashboard("fetch:before", { loadId: activeLoadId });
+
+        const { res, data, aborted } = await fetchMerchantJson(
+          "/api/requests",
+          {
+            signal,
+          },
+        );
+
+        debugDashboard("fetch:after", {
+          loadId: activeLoadId,
+          status: res?.status ?? null,
+          ok: res?.ok ?? false,
+          aborted,
+          signalAborted: signal?.aborted ?? false,
+        });
+
+        debugDashboard("fetch:parsed", {
+          loadId: activeLoadId,
+          topLevelKeys:
+            data && typeof data === "object" ? Object.keys(data) : [],
+          success:
+            data && typeof data === "object"
+              ? /** @type {{ success?: unknown }} */ (data).success
+              : undefined,
+          requestsCount: Array.isArray(
+            /** @type {{ requests?: unknown }} */ (data)?.requests,
+          )
+            ? /** @type {{ requests: unknown[] }} */ (data).requests.length
+            : 0,
+        });
+
+        if (signal?.aborted || activeLoadId !== loadGenerationRef.current) {
+          debugDashboard("loadRequests:stale-abort", {
+            loadId: activeLoadId,
+            currentLoadId: loadGenerationRef.current,
+            signalAborted: signal?.aborted ?? false,
+          });
+          return;
+        }
+
+        const result = processDashboardRequestsLoadResult({
+          res,
+          data,
+          aborted,
+          background,
+        });
+
+        debugDashboard("fetch:normalized", {
+          loadId: activeLoadId,
+          ok: result.ok,
+          requestCount: result.requests?.length ?? 0,
+          shouldClearRequests: result.shouldClearRequests,
+          hasError: Boolean(result.error),
+        });
+
+        if (!result.ok) {
+          if (result.error) {
+            setLoadError(result.error);
+          }
+          if (result.shouldClearRequests) {
+            setRequests([]);
+          }
+          return;
+        }
+
+        debugDashboard("setRequests:before", {
+          loadId: activeLoadId,
+          requestCount: result.requests?.length ?? 0,
+          firstRequestFieldNames:
+            result.requests?.[0] && typeof result.requests[0] === "object"
+              ? Object.keys(result.requests[0])
+              : [],
+        });
+
+        setRequests(result.requests ?? []);
+        setLoadError("");
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          error?.name === "AbortError" ||
+          activeLoadId !== loadGenerationRef.current
+        ) {
+          debugDashboard("loadRequests:catch-abort", {
+            loadId: activeLoadId,
+            errorName: error instanceof Error ? error.name : "Error",
+          });
+          return;
+        }
+
+        console.error("[dashboard] Failed to load return requests.", {
+          name: error instanceof Error ? error.name : "Error",
+        });
+
+        if (!background) {
+          setLoadError("Could not load return requests.");
+          setRequests([]);
+        }
+      } finally {
+        const isCurrentLoad = activeLoadId === loadGenerationRef.current;
+
+        debugDashboard("finally:before-setLoading-false", {
+          loadId: activeLoadId,
+          currentLoadId: loadGenerationRef.current,
+          isCurrentLoad,
+          background,
+          signalAborted: signal?.aborted ?? false,
+        });
+
+        if (isCurrentLoad && !background) {
+          setLoading(false);
+        }
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    loadRequests();
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      debugDashboard("mount", { timestamp: Date.now() });
+    }
+
+    const loadId = ++loadGenerationRef.current;
+    const controller = new AbortController();
+
+    debugDashboard("effect:load-start", { loadId });
+
+    loadRequests({ signal: controller.signal, loadId });
+
+    return () => {
+      debugDashboard("effect:cleanup-abort", { loadId });
+      controller.abort();
+    };
   }, [loadRequests]);
+
+  useEffect(() => {
+    if (!showLoadingSpinner) {
+      setLoadTimedOut(false);
+      return undefined;
+    }
+
+    const timeoutId = setTimeout(() => {
+      debugDashboard("load:timeout", {
+        loading,
+        requestCount: safeRequests.length,
+        loadId: loadGenerationRef.current,
+      });
+      setLoadTimedOut(true);
+    }, LOAD_TIMEOUT_MS);
+
+    return () => clearTimeout(timeoutId);
+  }, [showLoadingSpinner, loading, safeRequests.length]);
 
   async function handleSyncShopifyOrders() {
     if (syncing) {
@@ -237,6 +393,7 @@ export default function Dashboard() {
     setSyncMessage("");
     setSyncError("");
     setSyncHelper("");
+    setSyncReconnectPath("");
     setSyncSummary(null);
 
     try {
@@ -255,8 +412,20 @@ export default function Dashboard() {
           setSyncHelper(
             "Go to Shopify Partner Dashboard > API access > Protected customer data access. Add read_orders, request approval, then reinstall the app.",
           );
+        } else if (data.code === "SHOPIFY_TOKEN_INVALID") {
+          setSyncError(
+            data.error ||
+              "Shopify access token is invalid. Reconnect the app from Shopify Admin.",
+          );
+          setSyncHelper(
+            data.nextStep ||
+              "Reconnect the app from Shopify Admin to refresh the access token.",
+          );
+          setSyncReconnectPath(data.reconnectPath || "");
         } else {
-          setSyncError("Unable to sync Shopify orders");
+          setSyncError(data.error || "Unable to sync Shopify orders");
+          setSyncHelper(data.nextStep || "");
+          setSyncReconnectPath("");
         }
         return;
       }
@@ -276,7 +445,7 @@ export default function Dashboard() {
         ordersUpdated: data.orders?.updated ?? 0,
         itemsSynced: data.items?.totalSynced ?? 0,
       });
-      await loadRequests();
+      await loadRequests({ background: true });
     } catch {
       setSyncError("Unable to sync Shopify orders");
     } finally {
@@ -292,6 +461,7 @@ export default function Dashboard() {
     setProductSyncing(true);
     setProductSyncMessage("");
     setProductSyncError("");
+    setProductSyncReconnectPath("");
     setProductSyncWarnings([]);
 
     try {
@@ -303,8 +473,17 @@ export default function Dashboard() {
           setProductSyncError("Missing Shopify connection");
         } else if (res.status === 401 || data.error === "Unauthorized") {
           setProductSyncError("Unauthorized");
+        } else if (data.code === "SHOPIFY_TOKEN_INVALID") {
+          setProductSyncError(
+            data.error ||
+              "Shopify access token is invalid. Reconnect the app from Shopify Admin.",
+          );
+          setProductSyncReconnectPath(data.reconnectPath || "");
         } else {
-          setProductSyncError(data.error || "Unable to sync Shopify products");
+          setProductSyncError(
+            data.error || data.message || "Unable to sync Shopify products",
+          );
+          setProductSyncReconnectPath("");
         }
         return;
       }
@@ -375,7 +554,7 @@ export default function Dashboard() {
         }));
       }
 
-      await loadRequests();
+      await loadRequests({ background: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Update failed.";
       setActionErrors((prev) => ({ ...prev, [request.id]: message }));
@@ -499,11 +678,20 @@ export default function Dashboard() {
                 {syncHelper}
               </p>
             )}
+            {syncReconnectPath && (
+              <a
+                href={syncReconnectPath}
+                className="inline-flex text-sm font-medium text-indigo-700 hover:text-indigo-900 underline underline-offset-2"
+              >
+                Reconnect Shopify app
+              </a>
+            )}
           </div>
         )}
 
         {(productSyncMessage ||
           productSyncError ||
+          productSyncReconnectPath ||
           productSyncWarnings.length > 0) && (
           <div className="mb-6 space-y-2">
             {productSyncMessage && (
@@ -523,10 +711,18 @@ export default function Dashboard() {
                 {productSyncError}
               </p>
             )}
+            {productSyncReconnectPath && (
+              <a
+                href={productSyncReconnectPath}
+                className="inline-flex text-sm font-medium text-indigo-700 hover:text-indigo-900 underline underline-offset-2"
+              >
+                Reconnect Shopify app
+              </a>
+            )}
           </div>
         )}
 
-        {!loading && !loadError && safeRequests.length > 0 && (
+        {!showLoadingSpinner && !loadError && safeRequests.length > 0 && (
           <div className="mb-6 flex flex-wrap items-center gap-2 justify-between">
             <div className="flex flex-wrap gap-2">
               {STATUS_FILTERS.map((filter) => {
@@ -581,13 +777,18 @@ export default function Dashboard() {
           </div>
         )}
 
-        {loading && (
+        {showLoadingSpinner && (
           <div className="text-center py-20 text-slate-400">
             <p className="text-sm font-medium">Loading return requests…</p>
+            {IS_DEV && loadTimedOut && (
+              <p className="text-xs text-amber-700 mt-3">
+                Dashboard load timed out. Check console/network.
+              </p>
+            )}
           </div>
         )}
 
-        {!loading && loadError && (
+        {!showLoadingSpinner && loadError && (
           <div className="text-center py-12">
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 inline-block">
               {loadError}
@@ -595,7 +796,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && !loadError && safeRequests.length === 0 && (
+        {!showLoadingSpinner && !loadError && safeRequests.length === 0 && (
           <div className="text-center py-20 text-slate-400">
             <p className="text-4xl mb-3">📭</p>
             <p className="text-sm font-medium">No return requests yet.</p>
@@ -603,7 +804,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading &&
+        {!showLoadingSpinner &&
           !loadError &&
           safeRequests.length > 0 &&
           filteredRequests.length === 0 && (
@@ -622,9 +823,13 @@ export default function Dashboard() {
           )}
 
         <div className="space-y-4">
-          {!loading &&
+          {!showLoadingSpinner &&
             !loadError &&
             displayRequests.map((request) => {
+              if (!request?.id) {
+                return null;
+              }
+
               const risk = riskConfig[request.riskLevel] ?? riskConfig.Medium;
 
               return (

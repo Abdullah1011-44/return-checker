@@ -22,6 +22,42 @@ export function buildShopifySyncEventData({ merchantId, reason }) {
 }
 
 /**
+ * @param {unknown} error
+ */
+export function classifyInngestQueueError(error) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const cause = error?.cause;
+  const causePort =
+    cause && typeof cause === "object" && "port" in cause ? cause.port : null;
+  const causeCode =
+    cause && typeof cause === "object" && "code" in cause ? cause.code : null;
+
+  const isLocalInngestDevServer =
+    message.includes("8288") ||
+    causePort === 8288 ||
+    (causeCode === "ECONNREFUSED" &&
+      (message.includes("localhost") ||
+        message.includes("127.0.0.1") ||
+        message.includes("::1")));
+
+  if (isLocalInngestDevServer) {
+    const queueError = new Error(
+      "Inngest dev server is not running on localhost:8288",
+    );
+    queueError.code = "INNGEST_QUEUE_UNAVAILABLE";
+    queueError.status = 503;
+    queueError.cause = error;
+    return queueError;
+  }
+
+  const queueError = new Error("Failed to queue Shopify sync job");
+  queueError.code = "INNGEST_QUEUE_ERROR";
+  queueError.status = 503;
+  queueError.cause = error;
+  return queueError;
+}
+
+/**
  * Queue a background Shopify sync for one merchant.
  * Internal/scheduler routes must load merchants from DB before calling this.
  *
@@ -30,10 +66,14 @@ export function buildShopifySyncEventData({ merchantId, reason }) {
 export async function queueShopifySyncForMerchant({ merchantId, reason }) {
   const data = buildShopifySyncEventData({ merchantId, reason });
 
-  await inngest.send({
-    name: SHOPIFY_SYNC_REQUESTED_EVENT,
-    data,
-  });
+  try {
+    await inngest.send({
+      name: SHOPIFY_SYNC_REQUESTED_EVENT,
+      data,
+    });
+  } catch (error) {
+    throw classifyInngestQueueError(error);
+  }
 
   return {
     queued: true,

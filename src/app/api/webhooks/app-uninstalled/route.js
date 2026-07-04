@@ -100,6 +100,7 @@ export async function POST(request) {
           where: { id: merchant.id },
           data: {
             isActive: false,
+            shopifyAccessToken: null,
             shopifyUninstalledAt: new Date(),
           },
         });

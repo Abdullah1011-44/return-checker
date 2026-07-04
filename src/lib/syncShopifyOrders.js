@@ -6,6 +6,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import {
   parseShopifyNextEndpoint,
+  SHOPIFY_ADMIN_API_VERSION,
   shopifyAdminRequest,
 } from "@/lib/shopifyAdmin";
 
@@ -16,6 +17,23 @@ const MAX_ORDER_PAGES = 20;
 const ORDER_FIELDS =
   "id,name,order_number,total_price,currency,financial_status,fulfillment_status,cancelled_at,created_at,fulfillments,line_items,total_shipping_price_set";
 const INITIAL_ORDERS_ENDPOINT = `/orders.json?status=any&limit=${ORDERS_PAGE_LIMIT}&fields=${ORDER_FIELDS}`;
+const IS_DEV = process.env.NODE_ENV === "development";
+
+/**
+ * Document the external Shopify requests used by order sync (REST Admin API).
+ */
+export function getShopifyOrderSyncRequestInfo() {
+  return {
+    apiType: "REST",
+    apiVersion: SHOPIFY_ADMIN_API_VERSION,
+    connectionTestEndpoint: "/shop.json",
+    ordersEndpoint: "/orders.json",
+    ordersQuery: `status=any&limit=${ORDERS_PAGE_LIMIT}&fields=${ORDER_FIELDS}`,
+    initialOrdersPath: INITIAL_ORDERS_ENDPOINT,
+    orderFields: ORDER_FIELDS,
+    requiredScope: "read_orders",
+  };
+}
 
 /**
  * Use fulfillment timestamp only — not order.updated_at (changes on any edit).
@@ -187,11 +205,19 @@ export async function syncShopifyOrders(merchantId) {
     throw new Error("Merchant missing Shopify access token");
   }
 
-  console.log("[Shopify Sync Debug]", {
-    merchantId: merchant.id,
-    shopDomain: merchant.shopDomain,
-    hasToken: Boolean(merchant.shopifyAccessToken),
-  });
+  const syncRequestInfo = getShopifyOrderSyncRequestInfo();
+
+  if (IS_DEV) {
+    console.debug("[Shopify Order Sync]", {
+      shopDomain: merchant.shopDomain,
+      apiType: syncRequestInfo.apiType,
+      apiVersion: syncRequestInfo.apiVersion,
+      connectionTestEndpoint: syncRequestInfo.connectionTestEndpoint,
+      ordersEndpoint: syncRequestInfo.initialOrdersPath,
+      requiredScope: syncRequestInfo.requiredScope,
+      hasToken: Boolean(merchant.shopifyAccessToken),
+    });
+  }
 
   await testShopifyConnection(merchant.shopDomain, merchant.shopifyAccessToken);
 
