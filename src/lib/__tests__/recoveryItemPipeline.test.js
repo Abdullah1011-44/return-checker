@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { OFFER_TYPES } from "@/lib/dynamicOfferLadder";
+import { evaluateOrderItemRecoveryDecision } from "@/lib/itemRecoveryDecisions";
 import { PRODUCT_EXCLUSION_RULE_TYPE } from "@/lib/productExclusion";
 import { evaluateItemRecoveryPipeline } from "@/lib/recoveryItemPipeline";
 import { POLICY_DECISIONS, POLICY_REASONS } from "@/lib/returnPolicyEngine";
@@ -59,7 +60,7 @@ const merchantSettings = {
 };
 
 describe("recoveryItemPipeline", () => {
-  it("invokes generateOfferLadder for non-excluded items", () => {
+  it("invokes generateOfferLadder for non-excluded items", async () => {
     const generateOfferLadderFn = vi.fn(() => ({
       offers: [
         {
@@ -79,7 +80,7 @@ describe("recoveryItemPipeline", () => {
       },
     }));
 
-    const result = evaluateItemRecoveryPipeline({
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "CHANGED_MIND",
       customerReason: "changed_mind",
@@ -97,7 +98,7 @@ describe("recoveryItemPipeline", () => {
     expect(result.dynamicOfferLadder).toBeDefined();
   });
 
-  it("includes dynamicOfferLadder on every evaluated item result", () => {
+  it("includes dynamicOfferLadder on every evaluated item result", async () => {
     const paths = [
       {
         itemContext: { sku: "TEE-001" },
@@ -122,7 +123,7 @@ describe("recoveryItemPipeline", () => {
     ];
 
     for (const input of paths) {
-      const result = evaluateItemRecoveryPipeline({
+      const result = await evaluateItemRecoveryPipeline({
         merchantSettings,
         ...input,
       });
@@ -137,8 +138,8 @@ describe("recoveryItemPipeline", () => {
     }
   });
 
-  it("wrong_size item gets exchange as primaryOffer when stock is available", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("wrong_size item gets exchange as primaryOffer when stock is available", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "WRONG_SIZE",
       customerReason: "wrong_size",
@@ -155,8 +156,8 @@ describe("recoveryItemPipeline", () => {
     expect(result.dynamicOfferLadder.primaryOffer?.enabled).toBe(true);
   });
 
-  it("wrong_size item gets exchange as primaryOffer when stock is unknown", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("wrong_size item gets exchange as primaryOffer when stock is unknown", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "WRONG_SIZE",
       customerReason: "wrong_size",
@@ -174,8 +175,8 @@ describe("recoveryItemPipeline", () => {
     );
   });
 
-  it("wrong_size item does not get exchange as primaryOffer when exchangeStockAvailable is false", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("wrong_size item does not get exchange as primaryOffer when exchangeStockAvailable is false", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "WRONG_SIZE",
       customerReason: "wrong_size",
@@ -199,8 +200,8 @@ describe("recoveryItemPipeline", () => {
     );
   });
 
-  it("excluded item gets manual_review as the only enabled offer", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("excluded item gets manual_review as the only enabled offer", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "FINAL-SALE-001" },
       returnReason: "CHANGED_MIND",
       customerReason: "changed_mind",
@@ -221,8 +222,8 @@ describe("recoveryItemPipeline", () => {
     ).toBe(true);
   });
 
-  it("policyDecision.status LEGAL_REVIEW_REQUIRED results in manual_review primary and audit reason", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("policyDecision.status LEGAL_REVIEW_REQUIRED results in manual_review primary and audit reason", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "DAMAGED_ITEM",
       customerReason: "damaged_item",
@@ -247,8 +248,8 @@ describe("recoveryItemPipeline", () => {
     );
   });
 
-  it("excluded legal item passes LEGAL_REVIEW_REQUIRED status to dynamicOfferLadder", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("excluded legal item passes LEGAL_REVIEW_REQUIRED status to dynamicOfferLadder", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "FINAL-SALE-001" },
       returnReason: "DAMAGED_ITEM",
       customerReason: "damaged_item",
@@ -267,7 +268,7 @@ describe("recoveryItemPipeline", () => {
     );
   });
 
-  it("recoveryDecision manual review requirement forces manual_review primary", () => {
+  it("recoveryDecision manual review requirement forces manual_review primary", async () => {
     const generateOfferLadderFn = vi.fn(() => ({
       offers: [
         {
@@ -287,7 +288,7 @@ describe("recoveryItemPipeline", () => {
       },
     }));
 
-    const result = evaluateItemRecoveryPipeline({
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "CHANGED_MIND",
       customerReason: "changed_mind",
@@ -307,8 +308,8 @@ describe("recoveryItemPipeline", () => {
     );
   });
 
-  it("merchant-disabled exchange is disabled and not primary in dynamicOfferLadder", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("merchant-disabled exchange is disabled and not primary in dynamicOfferLadder", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "WRONG_SIZE",
       customerReason: "wrong_size",
@@ -333,12 +334,12 @@ describe("recoveryItemPipeline", () => {
     );
   });
 
-  it("RecoveryRule-like inputs are normalized and affect the ladder", () => {
+  it("RecoveryRule-like inputs are normalized and affect the ladder", async () => {
     const disabledExchangeRules = ladderRules.map((rule) =>
       rule.type === "EXCHANGE" ? { ...rule, enabled: false } : rule,
     );
 
-    const result = evaluateItemRecoveryPipeline({
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "WRONG_SIZE",
       customerReason: "wrong_size",
@@ -362,7 +363,7 @@ describe("recoveryItemPipeline", () => {
     );
   });
 
-  it("flat merchantRules are passed into the ladder", () => {
+  it("flat merchantRules are passed into the ladder", async () => {
     const buildDynamicOfferLadderFn = vi.fn((input) => ({
       engineVersion: "dynamic_offer_ladder_v1",
       primaryOffer: null,
@@ -373,7 +374,7 @@ describe("recoveryItemPipeline", () => {
       receivedMerchantRules: input.merchantRules,
     }));
 
-    evaluateItemRecoveryPipeline({
+    await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "WRONG_SIZE",
       customerReason: "wrong_size",
@@ -394,10 +395,10 @@ describe("recoveryItemPipeline", () => {
     });
   });
 
-  it("does not invoke generateOfferLadder for excluded items", () => {
+  it("does not invoke generateOfferLadder for excluded items", async () => {
     const generateOfferLadderFn = vi.fn();
 
-    const result = evaluateItemRecoveryPipeline({
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "FINAL-SALE-001" },
       returnReason: "CHANGED_MIND",
       customerReason: "changed_mind",
@@ -416,10 +417,10 @@ describe("recoveryItemPipeline", () => {
     expect(result.dynamicOfferLadder).toBeDefined();
   });
 
-  it("bypasses aiConfidenceThreshold for excluded items", () => {
+  it("bypasses aiConfidenceThreshold for excluded items", async () => {
     const generateOfferLadderFn = vi.fn();
 
-    const result = evaluateItemRecoveryPipeline({
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "FINAL-SALE-001" },
       returnReason: "WRONG_SIZE",
       customerReason: "wrong_size",
@@ -434,8 +435,8 @@ describe("recoveryItemPipeline", () => {
     expect(result.reason).toBe(POLICY_REASONS.PRODUCT_EXCLUDED);
   });
 
-  it("routes excluded legal items to LEGAL_REVIEW_REQUIRED", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("routes excluded legal items to LEGAL_REVIEW_REQUIRED", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "FINAL-SALE-001" },
       returnReason: "DAMAGED_ITEM",
       customerReason: "damaged_item",
@@ -449,10 +450,10 @@ describe("recoveryItemPipeline", () => {
     expect(result.recoveryOffers).toEqual([]);
   });
 
-  it("suppresses exchange, store credit, and partial refund offers when excluded", () => {
+  it("suppresses exchange, store credit, and partial refund offers when excluded", async () => {
     const generateOfferLadderFn = vi.fn();
 
-    const result = evaluateItemRecoveryPipeline({
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "FINAL-SALE-001" },
       returnReason: "CHANGED_MIND",
       customerReason: "changed_mind",
@@ -474,7 +475,7 @@ describe("recoveryItemPipeline", () => {
     expect(result.aiPersuasionEnabled).toBe(false);
   });
 
-  it("applies aiConfidenceThreshold when not excluded", () => {
+  it("applies aiConfidenceThreshold when not excluded", async () => {
     const generateOfferLadderFn = vi.fn(() => ({
       offers: [
         {
@@ -494,7 +495,7 @@ describe("recoveryItemPipeline", () => {
       },
     }));
 
-    const result = evaluateItemRecoveryPipeline({
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "CHANGED_MIND",
       customerReason: "changed_mind",
@@ -530,7 +531,7 @@ describe("reasonIntelligence integration", () => {
     qualityIssueType: expect.any(String),
   };
 
-  it("includes reasonIntelligence on every evaluated item result", () => {
+  it("includes reasonIntelligence on every evaluated item result", async () => {
     const paths = [
       {
         itemContext: { sku: "TEE-001" },
@@ -549,7 +550,7 @@ describe("reasonIntelligence integration", () => {
     ];
 
     for (const input of paths) {
-      const result = evaluateItemRecoveryPipeline({
+      const result = await evaluateItemRecoveryPipeline({
         merchantSettings,
         ...input,
       });
@@ -558,8 +559,8 @@ describe("reasonIntelligence integration", () => {
     }
   });
 
-  it("wrong_size item includes fit_issue and offer_exchange_first", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("wrong_size item includes fit_issue and offer_exchange_first", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "WRONG_SIZE",
       customerReason: "wrong_size",
@@ -576,8 +577,8 @@ describe("reasonIntelligence integration", () => {
     expect(result.reasonIntelligence.normalizedReason).toBe("wrong_size");
   });
 
-  it("damaged_item includes quality_issue, qualityIssueType, and manual review next step", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("damaged_item includes quality_issue, qualityIssueType, and manual review next step", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "DAMAGED_ITEM",
       customerReason: "damaged_item",
@@ -594,8 +595,8 @@ describe("reasonIntelligence integration", () => {
     );
   });
 
-  it('other + comment "too small" normalizes to wrong_size', () => {
-    const result = evaluateItemRecoveryPipeline({
+  it('other + comment "too small" normalizes to wrong_size', async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "OTHER",
       customerReason: "other",
@@ -610,8 +611,8 @@ describe("reasonIntelligence integration", () => {
     expect(result.reasonIntelligence.reasonGroup).toBe("fit_issue");
   });
 
-  it('other + comment "not as described" creates description_mismatch quality issue', () => {
-    const result = evaluateItemRecoveryPipeline({
+  it('other + comment "not as described" creates description_mismatch quality issue', async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "OTHER",
       customerReason: "other",
@@ -628,8 +629,8 @@ describe("reasonIntelligence integration", () => {
     );
   });
 
-  it('other + comment "poor quality" creates material_quality_issue', () => {
-    const result = evaluateItemRecoveryPipeline({
+  it('other + comment "poor quality" creates material_quality_issue', async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "OTHER",
       customerReason: "other",
@@ -646,8 +647,8 @@ describe("reasonIntelligence integration", () => {
     );
   });
 
-  it('changed_mind + comment "not working" normalizes to damaged_item with defect_issue', () => {
-    const result = evaluateItemRecoveryPipeline({
+  it('changed_mind + comment "not working" normalizes to damaged_item with defect_issue', async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "TEE-001" },
       returnReason: "CHANGED_MIND",
       customerReason: "changed_mind",
@@ -663,8 +664,8 @@ describe("reasonIntelligence integration", () => {
     expect(result.reasonIntelligence.reasonGroup).toBe("quality_issue");
   });
 
-  it("excluded items still include reasonIntelligence", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("excluded items still include reasonIntelligence", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "FINAL-SALE-001" },
       returnReason: "WRONG_SIZE",
       customerReason: "wrong_size",
@@ -676,8 +677,8 @@ describe("reasonIntelligence integration", () => {
     expect(result.reasonIntelligence.reasonGroup).toBe("fit_issue");
   });
 
-  it("reasonIntelligence does not override exclusion decision", () => {
-    const result = evaluateItemRecoveryPipeline({
+  it("reasonIntelligence does not override exclusion decision", async () => {
+    const result = await evaluateItemRecoveryPipeline({
       itemContext: { sku: "FINAL-SALE-001" },
       returnReason: "WRONG_SIZE",
       customerReason: "wrong_size",
@@ -690,5 +691,148 @@ describe("reasonIntelligence integration", () => {
     expect(result.reasonIntelligence.recommendedNextStep).toBe(
       "offer_exchange_first",
     );
+  });
+});
+
+describe("followUpQuestion integration", () => {
+  it("eligible items receive follow-up questions", async () => {
+    const result = await evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001", productName: "Classic Tee" },
+      returnReason: "WRONG_SIZE",
+      customerReason: "wrong_size",
+      comment: "uncomfortable wear",
+      merchantSettings,
+      recoveryRules: ladderRules,
+      recoveryScore: 92,
+      aiConfidenceThreshold: 0.7,
+    });
+
+    expect(result.followUpQuestion).toMatchObject({
+      shouldAskFollowUp: true,
+      question: expect.any(String),
+      questionType: expect.any(String),
+    });
+    expect(result.decision).toBe(POLICY_DECISIONS.EXCHANGE);
+  });
+
+  it("manual review skips follow-up generation", async () => {
+    const evaluateFollowUpQuestionFn = vi.fn();
+
+    const result = await evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001" },
+      returnReason: "WRONG_SIZE",
+      customerReason: "wrong_size",
+      comment: "uncomfortable wear",
+      merchantSettings,
+      recoveryRules: ladderRules,
+      recoveryScore: 40,
+      aiConfidenceThreshold: 0.7,
+      evaluateFollowUpQuestionFn,
+    });
+
+    expect(result.decision).toBe(POLICY_DECISIONS.MANUAL_REVIEW);
+    expect(result.reason).toBe(POLICY_REASONS.NO_SAFE_OPTION);
+    expect(result.followUpQuestion).toBeUndefined();
+    expect(evaluateFollowUpQuestionFn).not.toHaveBeenCalled();
+  });
+
+  it("hard blocked items skip follow-up generation", async () => {
+    const evaluateFollowUpQuestionFn = vi.fn();
+
+    const result = await evaluateItemRecoveryPipeline({
+      itemContext: { sku: "FINAL-SALE-001" },
+      returnReason: "WRONG_SIZE",
+      customerReason: "wrong_size",
+      comment: "uncomfortable wear",
+      recoveryRules: [exclusionRule],
+      evaluateFollowUpQuestionFn,
+    });
+
+    expect(result.productExcluded).toBe(true);
+    expect(result.followUpQuestion).toBeUndefined();
+    expect(evaluateFollowUpQuestionFn).not.toHaveBeenCalled();
+  });
+
+  it("uses fallback when AI is disabled", async () => {
+    const result = await evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001", productName: "Classic Tee" },
+      returnReason: "WRONG_SIZE",
+      customerReason: "wrong_size",
+      comment: "uncomfortable wear",
+      merchantSettings: { ...merchantSettings, allowAiFollowUp: false },
+      recoveryRules: ladderRules,
+      recoveryScore: 92,
+      aiConfidenceThreshold: 0.7,
+    });
+
+    expect(result.followUpQuestion).toMatchObject({
+      shouldAskFollowUp: true,
+      source: "fallback",
+      fallbackUsed: true,
+    });
+  });
+
+  it("silently falls back when follow-up engine throws", async () => {
+    const evaluateFollowUpQuestionFn = vi.fn(async () => {
+      throw new Error("AI unavailable");
+    });
+
+    const result = await evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001", productName: "Classic Tee" },
+      returnReason: "WRONG_SIZE",
+      customerReason: "wrong_size",
+      comment: "uncomfortable wear",
+      merchantSettings,
+      recoveryRules: ladderRules,
+      recoveryScore: 92,
+      aiConfidenceThreshold: 0.7,
+      evaluateFollowUpQuestionFn,
+    });
+
+    expect(evaluateFollowUpQuestionFn).toHaveBeenCalledOnce();
+    expect(result.followUpQuestion).toMatchObject({
+      shouldAskFollowUp: true,
+      source: "fallback",
+      fallbackUsed: true,
+    });
+  });
+
+  it("preserves existing pipeline fields when follow-up is attached", async () => {
+    const result = await evaluateItemRecoveryPipeline({
+      itemContext: { sku: "TEE-001" },
+      returnReason: "WRONG_SIZE",
+      customerReason: "wrong_size",
+      comment: "uncomfortable wear",
+      merchantSettings,
+      recoveryRules: ladderRules,
+      recoveryScore: 92,
+      aiConfidenceThreshold: 0.7,
+    });
+
+    expect(result).toMatchObject({
+      productExcluded: false,
+      decision: POLICY_DECISIONS.EXCHANGE,
+      reason: POLICY_REASONS.RULE_MATCHED,
+      generateOfferLadderInvoked: true,
+      aiPersuasionEnabled: true,
+      dynamicOfferLadder: expect.any(Object),
+      reasonIntelligence: expect.any(Object),
+    });
+  });
+
+  it("passes followUpQuestion through item recovery decisions", async () => {
+    const decision = await evaluateOrderItemRecoveryDecision({
+      orderItem: { id: "item-1", sku: "TEE-001", productName: "Classic Tee" },
+      returnReason: "wrong_size",
+      comment: "uncomfortable wear",
+      merchantSettings,
+      recoveryRules: ladderRules,
+    });
+
+    expect(decision.followUpQuestion).toMatchObject({
+      shouldAskFollowUp: true,
+      question: expect.any(String),
+    });
+    expect(decision.recommendedAction).toBe("OFFER_EXCHANGE");
   });
 });

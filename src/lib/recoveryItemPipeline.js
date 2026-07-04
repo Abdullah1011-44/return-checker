@@ -1,12 +1,13 @@
 /**
- * Per-item recovery pipeline (Task 31 + Task 32).
+ * Per-item recovery pipeline (Task 31 + Task 32 + Task 35).
  *
  * Pipeline order:
- *   Product Exclusion Check
- *   → Merchant Settings Gate        (inside generateOfferLadder)
- *   → Recovery Rules              (inside generateOfferLadder)
+ *   Reason Intelligence
+ *   → Product Exclusion Check
+ *   → Policy Engine / Merchant Settings Gate (inside generateOfferLadder)
+ *   → Merchant Recovery Rules (inside generateOfferLadder)
  *   → AI Guardrails / aiConfidenceThreshold
- *   → generateOfferLadder()
+ *   → Follow-up Question Engine
  *   → Final Decision
  *
  * Product exclusion is a pre-flight suppressor — not a recovery offer.
@@ -15,6 +16,13 @@
  */
 import { buildAIGuardrailContext } from "@/lib/aiGuardrails";
 import { buildDynamicOfferLadder } from "@/lib/dynamicOfferLadder";
+import { evaluateFollowUpQuestion } from "@/lib/followUpQuestionEngine";
+import { resolveFallbackFollowUpQuestion } from "@/lib/followUpQuestionPrompts";
+import {
+  detectFollowUpBlockedReason,
+  FOLLOW_UP_SOURCES,
+  hasSufficientCommentDetail,
+} from "@/lib/followUpQuestionSchemas";
 import {
   evaluateProductExclusion,
   findProductExclusionRule,
@@ -235,6 +243,204 @@ function attachReasonIntelligence(result, reasonIntelligence) {
   };
 }
 
+function pipelineRecommendedAction(pipelineResult, exclusionResult) {
+  if (exclusionResult.productExcluded) {
+    return pipelineResult.reason === POLICY_REASONS.LEGAL_REVIEW_REQUIRED
+      ? "LEGAL_REVIEW_REQUIRED"
+      : "MANUAL_REVIEW";
+  }
+
+  switch (pipelineResult.decision) {
+    case POLICY_DECISIONS.EXCHANGE:
+      return "OFFER_EXCHANGE";
+    case POLICY_DECISIONS.STORE_CREDIT:
+      return "OFFER_STORE_CREDIT";
+    case POLICY_DECISIONS.PARTIAL_REFUND:
+      return "OFFER_PARTIAL_REFUND";
+    default:
+      return "MANUAL_REVIEW";
+  }
+}
+
+function resolvePipelinePolicyStatus(pipelineResult, externalPolicyDecision) {
+  if (externalPolicyDecision?.status) {
+    return externalPolicyDecision.status;
+  }
+
+  if (pipelineResult.reason === POLICY_REASONS.LEGAL_REVIEW_REQUIRED) {
+    return "LEGAL_REVIEW_REQUIRED";
+  }
+
+  return null;
+}
+
+function shouldSkipFollowUpQuestionForPipeline({
+  pipelineResult,
+  exclusionResult,
+  reasonIntelligence,
+  comment,
+  externalPolicyDecision,
+  manualReviewRequired = false,
+}) {
+  if (exclusionResult.productExcluded) {
+    return true;
+  }
+
+  if (manualReviewRequired) {
+    return true;
+  }
+
+  const recommendedAction = pipelineRecommendedAction(
+    pipelineResult,
+    exclusionResult,
+  );
+  const policyStatus = resolvePipelinePolicyStatus(
+    pipelineResult,
+    externalPolicyDecision,
+  );
+  const legalFlags = pipelineResult.legalFlags ?? [];
+  const consumerLawRisk = legalFlags.includes(
+    POLICY_REASONS.ACL_REFUND_RIGHTS_MAY_APPLY,
+  );
+
+  if (
+    detectFollowUpBlockedReason({
+      policyStatus,
+      recommendedAction,
+      blockedReason: exclusionResult.productExcluded ? "hard_blocked" : null,
+      legalFlags,
+      consumerLawRisk,
+    })
+  ) {
+    return true;
+  }
+
+  if (reasonIntelligence?.followUpNeeded === false) {
+    return true;
+  }
+
+  if (
+    hasSufficientCommentDetail(
+      comment,
+      reasonIntelligence?.normalizedReason ?? "other",
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function attachFollowUpQuestion(result, followUpEvaluation) {
+  if (!followUpEvaluation?.shouldAskFollowUp) {
+    return result;
+  }
+
+  return {
+    ...result,
+    followUpQuestion: followUpEvaluation,
+  };
+}
+
+function buildSilentFallbackFollowUpQuestion(reasonIntelligence) {
+  const reasonCode = reasonIntelligence?.normalizedReason ?? "other";
+  const fallback = resolveFallbackFollowUpQuestion({
+    reasonCode,
+    followUpType: reasonIntelligence?.followUpType ?? null,
+  });
+
+  return {
+    shouldAskFollowUp: true,
+    question: fallback.question,
+    questionType: fallback.questionType,
+    reasonCode: fallback.reasonCode,
+    confidence: fallback.confidence,
+    source: FOLLOW_UP_SOURCES.FALLBACK,
+    fallbackUsed: true,
+    blockedReason: null,
+  };
+}
+
+/**
+ * @param {{
+ *   pipelineResult: Record<string, unknown>;
+ *   exclusionResult: Record<string, unknown>;
+ *   reasonIntelligence: Record<string, unknown>;
+ *   comment?: string | null;
+ *   externalPolicyDecision?: Record<string, unknown> | null;
+ *   manualReviewRequired?: boolean;
+ *   merchantSettings?: Record<string, unknown> | null;
+ *   resolvedCustomerReason?: string | null;
+ *   itemContext: Record<string, unknown>;
+ *   evaluateFollowUpQuestionFn?: typeof evaluateFollowUpQuestion;
+ * }} input
+ */
+async function resolveFollowUpQuestionForPipeline({
+  pipelineResult,
+  exclusionResult,
+  reasonIntelligence,
+  comment = null,
+  externalPolicyDecision = null,
+  manualReviewRequired = false,
+  merchantSettings = null,
+  resolvedCustomerReason = null,
+  itemContext,
+  evaluateFollowUpQuestionFn = evaluateFollowUpQuestion,
+}) {
+  if (
+    shouldSkipFollowUpQuestionForPipeline({
+      pipelineResult,
+      exclusionResult,
+      reasonIntelligence,
+      comment,
+      externalPolicyDecision,
+      manualReviewRequired,
+    })
+  ) {
+    return null;
+  }
+
+  const recommendedAction = pipelineRecommendedAction(
+    pipelineResult,
+    exclusionResult,
+  );
+  const policyStatus = resolvePipelinePolicyStatus(
+    pipelineResult,
+    externalPolicyDecision,
+  );
+  const legalFlags = pipelineResult.legalFlags ?? [];
+
+  try {
+    return await evaluateFollowUpQuestionFn({
+      reasonIntelligence,
+      comment,
+      policyStatus,
+      recommendedAction,
+      blockedReason: exclusionResult.productExcluded ? "hard_blocked" : null,
+      legalFlags,
+      consumerLawRisk: legalFlags.includes(
+        POLICY_REASONS.ACL_REFUND_RIGHTS_MAY_APPLY,
+      ),
+      merchantPolicyAllowsAi: merchantSettings?.allowAiFollowUp === true,
+      merchantSettings,
+      policyResult: {
+        decision: pipelineResult.decision,
+        reason: pipelineResult.reason,
+        status: policyStatus,
+      },
+      itemInformation: {
+        sku: itemContext?.sku ?? null,
+        productName: extractProductTitle(itemContext),
+        productType: extractProductType(itemContext),
+      },
+      itemHardBlocked: exclusionResult.productExcluded === true,
+      reason: resolvedCustomerReason,
+    });
+  } catch {
+    return buildSilentFallbackFollowUpQuestion(reasonIntelligence);
+  }
+}
+
 function passesAiConfidenceThreshold(recoveryScore, aiConfidenceThreshold) {
   if (aiConfidenceThreshold == null) {
     return true;
@@ -328,9 +534,10 @@ function buildExcludedItemPipelineResult(
  *   generateOfferLadderFn?: typeof generateOfferLadder;
  *   buildDynamicOfferLadderFn?: typeof buildDynamicOfferLadder;
  *   analyzeReturnReasonFn?: typeof analyzeReturnReason;
+ *   evaluateFollowUpQuestionFn?: typeof evaluateFollowUpQuestion;
  * }} input
  */
-export function evaluateItemRecoveryPipeline({
+export async function evaluateItemRecoveryPipeline({
   itemContext,
   returnReason = null,
   comment = null,
@@ -350,6 +557,7 @@ export function evaluateItemRecoveryPipeline({
   generateOfferLadderFn = generateOfferLadder,
   buildDynamicOfferLadderFn = buildDynamicOfferLadder,
   analyzeReturnReasonFn = analyzeReturnReason,
+  evaluateFollowUpQuestionFn = evaluateFollowUpQuestion,
 }) {
   const exclusionRule =
     productExclusionRule ?? findProductExclusionRule(recoveryRules);
@@ -371,7 +579,7 @@ export function evaluateItemRecoveryPipeline({
     merchantRules,
   );
 
-  function finalizePipelineResult(
+  async function finalizePipelineResult(
     result,
     { manualReviewRequired = false, policyDecision = null } = {},
   ) {
@@ -387,7 +595,7 @@ export function evaluateItemRecoveryPipeline({
       manualReviewRequired,
     });
 
-    return attachDynamicOfferLadder(
+    const withLadder = attachDynamicOfferLadder(
       attachReasonIntelligence(result, reasonIntelligence),
       {
         item: itemContext,
@@ -402,6 +610,21 @@ export function evaluateItemRecoveryPipeline({
         buildDynamicOfferLadderFn,
       },
     );
+
+    const followUpEvaluation = await resolveFollowUpQuestionForPipeline({
+      pipelineResult: result,
+      exclusionResult,
+      reasonIntelligence,
+      comment,
+      externalPolicyDecision,
+      manualReviewRequired,
+      merchantSettings,
+      resolvedCustomerReason,
+      itemContext,
+      evaluateFollowUpQuestionFn,
+    });
+
+    return attachFollowUpQuestion(withLadder, followUpEvaluation);
   }
 
   // Pre-flight product exclusion: skip merchant settings, recovery rules,

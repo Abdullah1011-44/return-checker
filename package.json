@@ -19,6 +19,7 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@prisma/client": "^6.19.3",
     "@sentry/nextjs": "^10.57.0",
     "@shopify/shopify-api": "^13.0.0",

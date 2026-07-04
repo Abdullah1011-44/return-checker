@@ -3,6 +3,8 @@
  * Pure constants and normalizers — no LLM, Prisma, or network calls.
  */
 
+import { z } from "zod";
+
 export const FOLLOW_UP_REASON_CODES = [
   "wrong_size",
   "damaged_item",
@@ -32,6 +34,7 @@ export const FOLLOW_UP_QUESTION_TYPES = [
 export const FOLLOW_UP_SOURCES = {
   FALLBACK: "fallback",
   REASON_INTELLIGENCE: "reason_intelligence",
+  AI: "ai",
   NONE: "none",
 };
 
@@ -252,4 +255,78 @@ export function buildNoFollowUpResult({
     fallbackUsed: false,
     blockedReason,
   };
+}
+
+export const followUpAiResponseSchema = z.object({
+  question: z.string().min(8).max(280),
+  questionType: z.string().min(1).max(80),
+  confidence: z.number().min(0).max(1).optional(),
+});
+
+/**
+ * Validate AI follow-up payload after Anthropic returns.
+ * Caller still runs safety checks separately.
+ *
+ * @param {unknown} value
+ */
+export function validateFollowUpAiResponse(value) {
+  const parsed = followUpAiResponseSchema.safeParse(value);
+
+  if (!parsed.success) {
+    return {
+      valid: false,
+      data: null,
+      issues: parsed.error.issues.map((issue) => issue.message),
+    };
+  }
+
+  const questionType = normalizeFollowUpQuestionType(parsed.data.questionType);
+
+  if (!questionType) {
+    return {
+      valid: false,
+      data: null,
+      issues: ["Invalid questionType"],
+    };
+  }
+
+  return {
+    valid: true,
+    data: {
+      question: parsed.data.question.trim(),
+      questionType,
+      confidence: parsed.data.confidence ?? null,
+    },
+    issues: [],
+  };
+}
+
+/**
+ * @param {string} text
+ */
+export function parseFollowUpAiResponseText(text) {
+  if (!text || typeof text !== "string") {
+    return validateFollowUpAiResponse(null);
+  }
+
+  const trimmed = text.trim();
+  const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+
+  if (!jsonMatch) {
+    return {
+      valid: false,
+      data: null,
+      issues: ["Missing JSON object"],
+    };
+  }
+
+  try {
+    return validateFollowUpAiResponse(JSON.parse(jsonMatch[0]));
+  } catch {
+    return {
+      valid: false,
+      data: null,
+      issues: ["Invalid JSON"],
+    };
+  }
 }

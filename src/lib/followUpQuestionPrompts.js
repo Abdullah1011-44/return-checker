@@ -145,3 +145,101 @@ export function isSupportedFollowUpReasonCode(reasonCode) {
     normalizeFollowUpReasonCode(reasonCode),
   );
 }
+
+const FORBIDDEN_CONTEXT_KEYS = new Set([
+  "customerEmail",
+  "email",
+  "phone",
+  "address",
+  "customerName",
+  "customerPhone",
+  "shippingAddress",
+  "billingAddress",
+  "comment",
+  "customerComment",
+  "accessToken",
+  "shopifyAccessToken",
+]);
+
+/**
+ * @param {unknown} value
+ */
+function omitForbiddenContext(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  /** @type {Record<string, unknown>} */
+  const safe = {};
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (FORBIDDEN_CONTEXT_KEYS.has(key)) {
+      continue;
+    }
+
+    if (
+      typeof entry === "string" ||
+      typeof entry === "number" ||
+      typeof entry === "boolean" ||
+      entry == null
+    ) {
+      safe[key] = entry;
+    } else if (Array.isArray(entry)) {
+      safe[key] = entry
+        .filter(
+          (item) =>
+            typeof item === "string" ||
+            typeof item === "number" ||
+            typeof item === "boolean",
+        )
+        .slice(0, 10);
+    }
+  }
+
+  return Object.keys(safe).length > 0 ? safe : null;
+}
+
+/**
+ * System prompt for AI follow-up generation.
+ */
+export function buildFollowUpQuestionSystemPrompt() {
+  return [
+    "You generate one short customer follow-up question for a return request.",
+    "Ask exactly one neutral clarifying question ending with a question mark.",
+    "Never approve or reject a return.",
+    "Never promise refunds, exchanges, store credit, or outcomes.",
+    "Never override merchant policy or consumer law.",
+    "Never mention risk scores, AI reasoning, recovery strategy, or internal policy codes.",
+    "Never blame the customer.",
+    "Do not request sensitive personal data such as payment details or government IDs.",
+    "Use plain, respectful language.",
+  ].join(" ");
+}
+
+/**
+ * @param {{
+ *   reasonCode: string;
+ *   followUpType: string | null;
+ *   merchantRecoveryRule?: unknown;
+ *   policyResult?: unknown;
+ *   existingFollowUpAnswers?: unknown;
+ *   itemInformation?: unknown;
+ * }} input
+ */
+export function buildFollowUpQuestionUserMessage(input) {
+  const payload = {
+    returnReason: input.reasonCode,
+    followUpType: input.followUpType,
+    merchantRecoveryRule: omitForbiddenContext(input.merchantRecoveryRule),
+    policyResult: omitForbiddenContext(input.policyResult),
+    existingFollowUpAnswers: Array.isArray(input.existingFollowUpAnswers)
+      ? input.existingFollowUpAnswers
+          .slice(0, 5)
+          .map((entry) => omitForbiddenContext(entry))
+          .filter(Boolean)
+      : null,
+    itemInformation: omitForbiddenContext(input.itemInformation),
+  };
+
+  return JSON.stringify(payload);
+}

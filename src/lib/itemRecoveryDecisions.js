@@ -136,6 +136,9 @@ export function serializeItemRecoveryDecision({
     ...(pipelineResult.reasonIntelligence
       ? { reasonIntelligence: pipelineResult.reasonIntelligence }
       : {}),
+    ...(pipelineResult.followUpQuestion
+      ? { followUpQuestion: pipelineResult.followUpQuestion }
+      : {}),
   };
 
   if (productExcluded) {
@@ -209,6 +212,9 @@ export function mergeCheckItemWithDecision(checkItem, decision) {
     ...(decision.reasonIntelligence
       ? { reasonIntelligence: decision.reasonIntelligence }
       : {}),
+    ...(decision.followUpQuestion
+      ? { followUpQuestion: decision.followUpQuestion }
+      : {}),
   };
 }
 
@@ -244,6 +250,9 @@ export function buildSingleItemTopLevelFields(decision) {
       : {}),
     ...(decision.reasonIntelligence
       ? { reasonIntelligence: decision.reasonIntelligence }
+      : {}),
+    ...(decision.followUpQuestion
+      ? { followUpQuestion: decision.followUpQuestion }
       : {}),
   };
 }
@@ -305,7 +314,7 @@ function buildLadderContextFromOrderItem(orderItem, ladderContext) {
  *   buildDynamicOfferLadderFn?: Parameters<typeof evaluateItemRecoveryPipeline>[0]["buildDynamicOfferLadderFn"];
  * }} input
  */
-export function evaluateOrderItemRecoveryDecision({
+export async function evaluateOrderItemRecoveryDecision({
   orderItem,
   returnReason = null,
   comment = null,
@@ -320,13 +329,14 @@ export function evaluateOrderItemRecoveryDecision({
   recoveryOption = null,
   generateOfferLadderFn,
   buildDynamicOfferLadderFn,
+  evaluateFollowUpQuestionFn,
 }) {
   const reasonKey = returnReason
     ? reasonKeyFromUiOrPrisma(returnReason)
     : "other";
   const mappedReason = returnReason ? mapReturnReason(returnReason) : null;
 
-  const pipelineResult = evaluateItemRecoveryPipeline({
+  const pipelineResult = await evaluateItemRecoveryPipeline({
     itemContext: buildOrderItemContext(orderItem),
     returnReason: mappedReason ?? returnReason,
     customerReason: returnReason,
@@ -349,6 +359,7 @@ export function evaluateOrderItemRecoveryDecision({
     recoveryOption,
     generateOfferLadderFn,
     buildDynamicOfferLadderFn,
+    evaluateFollowUpQuestionFn,
   });
 
   return serializeItemRecoveryDecision({
@@ -466,16 +477,18 @@ export async function evaluateCheckReturnItemDecisions({
   const productExclusionRule = findProductExclusionRule(policyRules);
   const orderItems = order?.items ?? [];
 
-  const itemDecisions = orderItems.map((orderItem) =>
-    evaluateOrderItemRecoveryDecision({
-      orderItem,
-      merchantSettings,
-      recoveryRules: policyRules ?? [],
-      productExclusionRule,
-      aiConfidenceThreshold,
-      order,
-      generateOfferLadderFn,
-    }),
+  const itemDecisions = await Promise.all(
+    orderItems.map((orderItem) =>
+      evaluateOrderItemRecoveryDecision({
+        orderItem,
+        merchantSettings,
+        recoveryRules: policyRules ?? [],
+        productExclusionRule,
+        aiConfidenceThreshold,
+        order,
+        generateOfferLadderFn,
+      }),
+    ),
   );
 
   const policyResult = buildAggregatePolicyResult({
@@ -539,21 +552,23 @@ export async function evaluateSubmitReturnItemDecisions({
   );
   const productExclusionRule = findProductExclusionRule(policyRules);
 
-  const itemDecisions = matchedOrderItems.map((orderItem, index) => {
-    const requestItem = returnRequestItems[index] ?? {};
-    return evaluateOrderItemRecoveryDecision({
-      orderItem,
-      returnReason: requestItem.returnReason,
-      comment: requestItem.comment,
-      recoveryOption: requestItem.selectedOption ?? null,
-      merchantSettings,
-      recoveryRules: policyRules ?? [],
-      productExclusionRule,
-      aiConfidenceThreshold,
-      order,
-      generateOfferLadderFn,
-    });
-  });
+  const itemDecisions = await Promise.all(
+    matchedOrderItems.map((orderItem, index) => {
+      const requestItem = returnRequestItems[index] ?? {};
+      return evaluateOrderItemRecoveryDecision({
+        orderItem,
+        returnReason: requestItem.returnReason,
+        comment: requestItem.comment,
+        recoveryOption: requestItem.selectedOption ?? null,
+        merchantSettings,
+        recoveryRules: policyRules ?? [],
+        productExclusionRule,
+        aiConfidenceThreshold,
+        order,
+        generateOfferLadderFn,
+      });
+    }),
+  );
 
   const returnRequest = {
     ...buildReturnRequestInput(returnRequestItems),

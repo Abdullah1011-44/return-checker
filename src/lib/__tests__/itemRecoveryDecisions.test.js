@@ -46,8 +46,8 @@ const merchantSettings = {
 };
 
 describe("itemRecoveryDecisions", () => {
-  it("routes excluded change-of-mind items to MANUAL_REVIEW with safe customer copy", () => {
-    const decision = evaluateOrderItemRecoveryDecision({
+  it("routes excluded change-of-mind items to MANUAL_REVIEW with safe customer copy", async () => {
+    const decision = await evaluateOrderItemRecoveryDecision({
       orderItem: { id: "item-1", sku: "FINAL-SALE-001" },
       returnReason: "changed_mind",
       merchantSettings,
@@ -67,8 +67,8 @@ describe("itemRecoveryDecisions", () => {
     expect(decision.customerMessage).not.toContain(decision.exclusionRuleId);
   });
 
-  it("routes excluded damaged items to LEGAL_REVIEW_REQUIRED", () => {
-    const decision = evaluateOrderItemRecoveryDecision({
+  it("routes excluded damaged items to LEGAL_REVIEW_REQUIRED", async () => {
+    const decision = await evaluateOrderItemRecoveryDecision({
       orderItem: { id: "item-1", sku: "FINAL-SALE-001" },
       returnReason: "damaged_item",
       merchantSettings,
@@ -81,10 +81,10 @@ describe("itemRecoveryDecisions", () => {
     expect(decision.aiOfferSuppressed).toBe(true);
   });
 
-  it("does not call generateOfferLadder for excluded items", () => {
+  it("does not call generateOfferLadder for excluded items", async () => {
     const generateOfferLadderFn = vi.fn();
 
-    evaluateOrderItemRecoveryDecision({
+    await evaluateOrderItemRecoveryDecision({
       orderItem: { id: "item-1", sku: "FINAL-SALE-001" },
       returnReason: "changed_mind",
       merchantSettings,
@@ -96,10 +96,10 @@ describe("itemRecoveryDecisions", () => {
     expect(generateOfferLadderFn).not.toHaveBeenCalled();
   });
 
-  it("still runs offer ladder for non-excluded items", () => {
+  it("still runs offer ladder for non-excluded items", async () => {
     const generateOfferLadderFn = vi.fn((input) => generateOfferLadder(input));
 
-    const decision = evaluateOrderItemRecoveryDecision({
+    const decision = await evaluateOrderItemRecoveryDecision({
       orderItem: { id: "item-2", sku: "TEE-001" },
       returnReason: "changed_mind",
       merchantSettings,

@@ -1,7 +1,11 @@
 /**
- * Follow-up Question Engine (Task 35 — Prompt 1).
- * Fallback-first, deterministic — no LLM, Prisma, or network calls.
+ * Follow-up Question Engine (Task 35).
+ * Fallback-first with optional Anthropic AI generation.
  */
+import {
+  canUseAiForFollowUp,
+  generateAiFollowUpQuestion,
+} from "@/lib/followUpQuestionAi";
 import { resolveFallbackFollowUpQuestion } from "@/lib/followUpQuestionPrompts";
 import { validateFollowUpQuestionContent } from "@/lib/followUpQuestionSafety";
 import {
@@ -76,6 +80,7 @@ function buildFollowUpResult({
   reasonCode,
   confidence,
   fallbackUsed,
+  source = null,
 }) {
   const safety = validateFollowUpQuestionContent(question);
 
@@ -94,12 +99,25 @@ function buildFollowUpResult({
     questionType,
     reasonCode,
     confidence,
-    source: fallbackUsed
-      ? FOLLOW_UP_SOURCES.FALLBACK
-      : FOLLOW_UP_SOURCES.REASON_INTELLIGENCE,
+    source:
+      source ??
+      (fallbackUsed
+        ? FOLLOW_UP_SOURCES.FALLBACK
+        : FOLLOW_UP_SOURCES.REASON_INTELLIGENCE),
     fallbackUsed,
     blockedReason: null,
   };
+}
+
+function buildFallbackFollowUpResult(fallback) {
+  return buildFollowUpResult({
+    question: fallback.question,
+    questionType: fallback.questionType,
+    reasonCode: fallback.reasonCode,
+    confidence: fallback.confidence,
+    fallbackUsed: true,
+    source: FOLLOW_UP_SOURCES.FALLBACK,
+  });
 }
 
 /**
@@ -117,9 +135,18 @@ function buildFollowUpResult({
  *   blockedReason?: string | null;
  *   legalFlags?: string[] | null;
  *   consumerLawRisk?: boolean | null;
+ *   merchantPolicyAllowsAi?: boolean | null;
+ *   merchantSettings?: Record<string, unknown> | null;
+ *   policyResult?: Record<string, unknown> | null;
+ *   merchantRecoveryRule?: Record<string, unknown> | null;
+ *   existingFollowUpAnswers?: Array<Record<string, unknown>> | null;
+ *   itemInformation?: Record<string, unknown> | null;
+ *   itemHardBlocked?: boolean | null;
+ *   aiModel?: string | null;
+ *   useSonnet?: boolean | null;
  * }} input
  */
-export function evaluateFollowUpQuestion(input = {}) {
+export async function evaluateFollowUpQuestion(input = {}) {
   const reasonCode = resolveReasonCode(input);
   const comment = normalizeCommentText(input.comment);
 
@@ -157,11 +184,17 @@ export function evaluateFollowUpQuestion(input = {}) {
     followUpType,
   });
 
-  return buildFollowUpResult({
-    question: fallback.question,
-    questionType: fallback.questionType,
-    reasonCode: fallback.reasonCode,
-    confidence: fallback.confidence,
-    fallbackUsed: true,
-  });
+  if (canUseAiForFollowUp(input)) {
+    const aiResult = await generateAiFollowUpQuestion({
+      input,
+      reasonCode,
+      followUpType,
+    });
+
+    if (aiResult) {
+      return aiResult;
+    }
+  }
+
+  return buildFallbackFollowUpResult(fallback);
 }
