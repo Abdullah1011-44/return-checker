@@ -1,0 +1,81 @@
+<div
+  class="rr-return-assistant rr-return-assistant--inline"
+  data-rr-return-assistant
+  data-mode="inline"
+  data-shop="{{ shop.permanent_domain | escape }}"
+  data-proxy-base="{{ block.settings.proxy_path | default: '/apps/return-assistant' | escape }}"
+  data-title="{{ block.settings.title | escape }}"
+  data-greeting="{{ block.settings.greeting | escape }}"
+  data-button-text="{{ block.settings.button_text | escape }}"
+  data-accent-color="{{ block.settings.accent_color | escape }}"
+  style="--rr-accent-color: {{ block.settings.accent_color }};"
+>
+  <div class="rr-return-assistant__card" data-rr-return-assistant-card>
+    <h2 class="rr-return-assistant__title" data-rr-return-assistant-title>
+      {{ block.settings.title | escape }}
+    </h2>
+    <p class="rr-return-assistant__greeting" data-rr-return-assistant-greeting>
+      {{ block.settings.greeting | escape }}
+    </p>
+    <button
+      type="button"
+      class="rr-return-assistant__button"
+      data-rr-return-assistant-trigger
+    >
+      {{ block.settings.button_text | escape }}
+    </button>
+  </div>
+
+  <div
+    class="rr-return-assistant__panel rr-return-assistant__panel--hidden"
+    data-rr-return-assistant-panel
+    hidden
+    aria-hidden="true"
+  >
+    <p class="rr-return-assistant__placeholder">
+      {{ 'return_assistant.placeholder.body' | t }}
+    </p>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Return Assistant",
+  "target": "section",
+  "stylesheet": "return-assistant.css",
+  "javascript": "return-assistant.js",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Title",
+      "default": "Return Assistant"
+    },
+    {
+      "type": "textarea",
+      "id": "greeting",
+      "label": "Greeting",
+      "default": "We'll help you start your return."
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button text",
+      "default": "Start return"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent color",
+      "default": "#2563eb"
+    },
+    {
+      "type": "text",
+      "id": "proxy_path",
+      "label": "App proxy path",
+      "default": "/apps/return-assistant",
+      "info": "Storefront path that maps to the Return Assistant app proxy."
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,12 @@
+{
+  "return_assistant": {
+    "placeholder": {
+      "title": "Return Assistant",
+      "body": "Return assistant chat will appear here soon."
+    },
+    "launcher": {
+      "label": "Open return assistant"
+    },
+    "close": "Close"
+  }
+}

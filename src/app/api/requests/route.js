@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { mapReturnRequestToDashboard } from "@/lib/dashboardMapper";
+import { mapReturnRequestsToDashboard } from "@/lib/dashboardMapperWithImages";
 import { requireMerchantForRoute } from "@/lib/merchantApi";
 import {
   aggregateOfferAcceptanceMetrics,
@@ -50,12 +50,11 @@ export async function GET(request) {
     const offerAcceptanceByReturnItemId =
       buildOfferAcceptanceByReturnItemId(offerAcceptances);
 
-    const requests = returnRequests.map((returnRequest) =>
-      mapReturnRequestToDashboard(returnRequest, {
-        storeType: settings?.storeType ?? null,
-        offerAcceptanceByReturnItemId,
-      }),
-    );
+    const requests = await mapReturnRequestsToDashboard(returnRequests, {
+      merchantId: merchant.id,
+      storeType: settings?.storeType ?? null,
+      offerAcceptanceByReturnItemId,
+    });
 
     const offerAcceptanceSummary = aggregateOfferAcceptanceMetrics(
       offerAcceptances,
@@ -64,6 +63,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
+      shopDomain: merchant.shopDomain ?? null,
       requests,
       offerAcceptanceSummary,
     });

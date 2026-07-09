@@ -1,0 +1,192 @@
+.rr-return-assistant {
+  --rr-accent-color: #2563eb;
+  --rr-surface: #ffffff;
+  --rr-text: #111827;
+  --rr-muted: #6b7280;
+  --rr-border: #e5e7eb;
+  --rr-shadow: 0 10px 30px rgba(17, 24, 39, 0.12);
+  --rr-radius: 12px;
+  font-family: inherit;
+  color: var(--rr-text);
+  box-sizing: border-box;
+}
+
+.rr-return-assistant *,
+.rr-return-assistant *::before,
+.rr-return-assistant *::after {
+  box-sizing: border-box;
+}
+
+.rr-return-assistant--inline {
+  width: 100%;
+  max-width: 36rem;
+  margin: 0 auto;
+}
+
+.rr-return-assistant__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius);
+  background: var(--rr-surface);
+  box-shadow: var(--rr-shadow);
+}
+
+.rr-return-assistant__title,
+.rr-return-assistant__panel-title {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.rr-return-assistant__greeting,
+.rr-return-assistant__placeholder {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--rr-muted);
+}
+
+.rr-return-assistant__button,
+.rr-return-assistant__launcher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--rr-accent-color);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.rr-return-assistant__button {
+  align-self: flex-start;
+  min-height: 2.5rem;
+  padding: 0.625rem 1.125rem;
+}
+
+.rr-return-assistant__button:hover,
+.rr-return-assistant__launcher:hover {
+  opacity: 0.92;
+}
+
+.rr-return-assistant__button:focus-visible,
+.rr-return-assistant__launcher:focus-visible,
+.rr-return-assistant__close:focus-visible {
+  outline: 2px solid var(--rr-accent-color);
+  outline-offset: 2px;
+}
+
+.rr-return-assistant--floating {
+  position: fixed;
+  z-index: 9999;
+  inset: auto 1rem 1rem auto;
+  width: auto;
+  max-width: calc(100vw - 2rem);
+}
+
+.rr-return-assistant--floating.rr-return-assistant--bottom-left {
+  inset: auto auto 1rem 1rem;
+}
+
+.rr-return-assistant--floating.rr-return-assistant--bottom-right {
+  inset: auto 1rem 1rem auto;
+}
+
+.rr-return-assistant__launcher {
+  min-height: 3rem;
+  padding: 0.75rem 1.125rem;
+  box-shadow: var(--rr-shadow);
+}
+
+.rr-return-assistant__launcher-text {
+  white-space: nowrap;
+}
+
+.rr-return-assistant__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1rem;
+  border: 1px solid var(--rr-border);
+  border-radius: var(--rr-radius);
+  background: var(--rr-surface);
+  box-shadow: var(--rr-shadow);
+}
+
+.rr-return-assistant--floating .rr-return-assistant__panel {
+  position: absolute;
+  bottom: calc(100% + 0.75rem);
+  right: 0;
+}
+
+.rr-return-assistant--floating.rr-return-assistant--bottom-left
+  .rr-return-assistant__panel {
+  right: auto;
+  left: 0;
+}
+
+.rr-return-assistant__panel--hidden {
+  display: none;
+}
+
+.rr-return-assistant__panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.rr-return-assistant__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--rr-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rr-return-assistant__close:hover {
+  background: #f3f4f6;
+  color: var(--rr-text);
+}
+
+@media (max-width: 640px) {
+  .rr-return-assistant--floating {
+    inset: auto 0.75rem 0.75rem auto;
+  }
+
+  .rr-return-assistant--floating.rr-return-assistant--bottom-left {
+    inset: auto auto 0.75rem 0.75rem;
+  }
+
+  .rr-return-assistant__card,
+  .rr-return-assistant__panel {
+    padding: 1rem;
+  }
+
+  .rr-return-assistant__launcher {
+    min-height: 2.75rem;
+    padding: 0.625rem 1rem;
+  }
+
+  .rr-return-assistant--floating .rr-return-assistant__panel {
+    width: min(20rem, calc(100vw - 1.5rem));
+  }
+}

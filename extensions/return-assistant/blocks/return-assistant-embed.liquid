@@ -1,0 +1,113 @@
+<div
+  class="rr-return-assistant rr-return-assistant--floating rr-return-assistant--{{ block.settings.position }}"
+  data-rr-return-assistant
+  data-mode="floating"
+  data-shop="{{ shop.permanent_domain | escape }}"
+  data-proxy-base="{{ block.settings.proxy_path | default: '/apps/return-assistant' | escape }}"
+  data-title="{{ block.settings.title | escape }}"
+  data-greeting="{{ block.settings.greeting | escape }}"
+  data-button-text="{{ block.settings.button_text | escape }}"
+  data-accent-color="{{ block.settings.accent_color | escape }}"
+  data-position="{{ block.settings.position | escape }}"
+  style="--rr-accent-color: {{ block.settings.accent_color }};"
+>
+  <button
+    type="button"
+    class="rr-return-assistant__launcher"
+    data-rr-return-assistant-launcher
+    aria-label="{{ 'return_assistant.launcher.label' | t | escape }}"
+    aria-expanded="false"
+    aria-controls="rr-return-assistant-panel-{{ block.id }}"
+  >
+    <span class="rr-return-assistant__launcher-text" data-rr-return-assistant-launcher-text>
+      {{ block.settings.button_text | escape }}
+    </span>
+  </button>
+
+  <div
+    id="rr-return-assistant-panel-{{ block.id }}"
+    class="rr-return-assistant__panel rr-return-assistant__panel--hidden"
+    data-rr-return-assistant-panel
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="rr-return-assistant-panel-title-{{ block.id }}"
+    hidden
+    aria-hidden="true"
+  >
+    <div class="rr-return-assistant__panel-header">
+      <h2
+        class="rr-return-assistant__panel-title"
+        id="rr-return-assistant-panel-title-{{ block.id }}"
+        data-rr-return-assistant-title
+      >
+        {{ block.settings.title | escape }}
+      </h2>
+      <button
+        type="button"
+        class="rr-return-assistant__close"
+        data-rr-return-assistant-close
+        aria-label="{{ 'return_assistant.close' | t | escape }}"
+      >
+        <span aria-hidden="true">&times;</span>
+      </button>
+    </div>
+    <p class="rr-return-assistant__greeting" data-rr-return-assistant-greeting>
+      {{ block.settings.greeting | escape }}
+    </p>
+    <p class="rr-return-assistant__placeholder">
+      {{ 'return_assistant.placeholder.body' | t }}
+    </p>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Return Assistant (floating)",
+  "target": "body",
+  "stylesheet": "return-assistant.css",
+  "javascript": "return-assistant.js",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Title",
+      "default": "Return Assistant"
+    },
+    {
+      "type": "textarea",
+      "id": "greeting",
+      "label": "Greeting",
+      "default": "We'll help you start your return."
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Launcher text",
+      "default": "Returns"
+    },
+    {
+      "type": "select",
+      "id": "position",
+      "label": "Position",
+      "options": [
+        { "value": "bottom-right", "label": "Bottom right" },
+        { "value": "bottom-left", "label": "Bottom left" }
+      ],
+      "default": "bottom-right"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent color",
+      "default": "#2563eb"
+    },
+    {
+      "type": "text",
+      "id": "proxy_path",
+      "label": "App proxy path",
+      "default": "/apps/return-assistant",
+      "info": "Storefront path that maps to the Return Assistant app proxy."
+    }
+  ]
+}
+{% endschema %}
