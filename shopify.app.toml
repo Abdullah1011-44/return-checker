@@ -1,0 +1,29 @@
+# Shopify CLI app configuration for Return Recovery Copilot.
+# Linked to the existing Partner Dashboard app via client_id.
+# Docs: https://shopify.dev/docs/apps/build/cli-for-apps/app-configuration
+
+name = "Return Recovery Copilot"
+client_id = "64b0502aafeb70588c4ba6cb34c8506c"
+application_url = "http://localhost:3000"
+embedded = false
+
+extension_directories = ["extensions"]
+
+[access_scopes]
+# Must stay aligned with SHOPIFY_SCOPES in .env
+scopes = "read_orders,read_products"
+# Preserve custom /api/auth/install OAuth flow (scope passed in authorize URL).
+use_legacy_install_flow = true
+
+[auth]
+redirect_urls = [
+  "http://localhost:3000/api/auth/callback",
+]
+
+[app_proxy]
+url = "/api/proxy/return-assistant"
+subpath = "return-assistant"
+prefix = "apps"
+
+[build]
+automatically_update_urls_on_dev = true

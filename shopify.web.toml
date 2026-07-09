@@ -1,0 +1,7 @@
+# Shopify CLI web process config for the Next.js app at repo root.
+name = "return-checker"
+roles = ["frontend", "backend"]
+
+[commands]
+dev = "npm run dev"
+build = "npm run build"

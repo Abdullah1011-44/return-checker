@@ -77,7 +77,7 @@ This publishes `extensions/return-assistant/` including:
 - `assets/return-assistant.css`
 - `assets/return-assistant.js`
 
-**Note:** `shopify.app.toml` is not required in-repo for this task; proxy and extension can be configured via Partner Dashboard and CLI deploy.
+**Note:** App proxy and extension deploy are managed via `shopify.app.toml` at the repo root and `shopify app deploy`.
 
 For local theme development against a dev store:
 

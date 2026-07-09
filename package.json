@@ -13,7 +13,10 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "db:seed": "prisma db seed",
-    "db:seed:shopify": "node prisma/seed-shopify-merchant-orders.js"
+    "db:seed:shopify": "node prisma/seed-shopify-merchant-orders.js",
+    "repair:dev-orders": "node scripts/repair-dev-shopify-orders.js",
+    "shopify:dev": "shopify app dev",
+    "shopify:deploy": "shopify app deploy"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
