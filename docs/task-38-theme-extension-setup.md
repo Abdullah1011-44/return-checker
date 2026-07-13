@@ -173,6 +173,7 @@ Until then, `features` in the bootstrap JSON remain `false`, and customers shoul
 
 | Symptom | Likely cause |
 |---------|----------------|
+| `/apps/return-assistant` redirects to `/api/proxy/return-assistant` on the shop domain (404) | Next.js trailing-slash 308; ensure `skipTrailingSlashRedirect: true` in `next.config.mjs` and restart the Next.js server |
 | `/apps/return-assistant` 404 on storefront | App proxy not configured or wrong subpath |
 | Proxy returns 401 on storefront | Merchant inactive/uninstalled, or clock skew on timestamp |
 | Extension blocks missing in theme editor | Extension not deployed (`shopify app deploy`) |

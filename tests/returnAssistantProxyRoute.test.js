@@ -144,6 +144,7 @@ describe("return assistant proxy route", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Location")).toBeNull();
     expect(data).toEqual({
       ok: true,
       enabled: true,
@@ -163,6 +164,36 @@ describe("return assistant proxy route", () => {
       },
     });
     expect(mockGetCurrentMerchant).not.toHaveBeenCalled();
+  });
+
+  it("GET with trailing slash path returns 200 JSON without redirect", async () => {
+    // Shopify App Proxy appends a trailing slash when forwarding; the handler
+    // itself must still return JSON (Next.js trailing-slash redirects are disabled).
+    const trailingSlashRequest = new Request(
+      buildSignedProxyUrl(
+        `${PROXY_PATH}/`,
+        {
+          shop: SHOP_DOMAIN,
+          timestamp: currentProxyTimestamp(),
+        },
+        TEST_SECRET,
+      ),
+      {
+        method: "GET",
+        headers: {
+          "x-forwarded-for": "203.0.113.10",
+        },
+      },
+    );
+
+    const response = await GET(trailingSlashRequest);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Location")).toBeNull();
+    expect(data.ok).toBe(true);
+    expect(data.enabled).toBe(true);
+    expect(data.shop).toBe(SHOP_DOMAIN);
   });
 
   it("GET missing signature returns 401", async () => {
